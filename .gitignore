@@ -1,0 +1,27 @@
+# Gradle/Build
+.gradle/
+build/
+out/
+logs/
+*.log
+
+# Wrapper: 반드시 버전관리
+gradle/wrapper/
+!gradle/wrapper/gradle-wrapper.properties
+!gradle/wrapper/gradle-wrapper.jar
+!gradlew
+!gradlew.bat
+
+# IDE
+.idea/
+*.iml
+.project
+.classpath
+.settings/
+bin/
+target/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
