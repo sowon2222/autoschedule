@@ -6,7 +6,7 @@ CREATE TABLE "user" (
   id           BIGSERIAL PRIMARY KEY,            -- 고유 사용자 ID (자동 증가)
   email        TEXT UNIQUE NOT NULL,             -- 로그인용 이메일 (유니크)
   name         TEXT NOT NULL,                    -- 표시 이름
-  timezone     TEXT NOT NULL DEFAULT 'Asia/Seoul', -- 사용자별 시간대 (스케줄 계산 시 사용)
+  -- timezone     TEXT NOT NULL DEFAULT 'Asia/Seoul', -- 사용자별 시간대 (스케줄 계산 시 사용)
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now()  -- 생성 시각 (UTC 기반)
 );
 
