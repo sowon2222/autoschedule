@@ -23,7 +23,7 @@
 | Week 3 | 자동 스케줄링 로직 완성 |
 | Week 4 | 배포 및 프로젝트 마무리 |
 
-> 상세 일정은 [개발 블로그](https://sowon02.tistory.com/category/Project/)에서 확인
+> 상세 일정은 [개발 블로그](https://sowon02.tistory.com/13)에서 확인
 
 ---
 
