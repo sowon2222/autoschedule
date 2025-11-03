@@ -2,7 +2,7 @@ plugins {
 	id 'java'
 	id 'org.springframework.boot' version '3.5.3'
 	id 'io.spring.dependency-management' version '1.1.7'
-	id 'org.flywaydb.flyway' version '10.15.0' // Flyway 데이터베이스 마이그레이션 도구
+	id 'org.flywaydb.flyway' version '11.7.2' // DB 마이그레이션
 }
 
 group = 'com.mysite'
@@ -19,18 +19,42 @@ repositories {
 }
 
 dependencies {
-	// Spring Boot Starter
+	// Spring Boot 기본
 	implementation 'org.springframework.boot:spring-boot-starter-web'
-	implementation 'org.springframework.boot:spring-boot-starter-data-jpa' // JPA
-	testImplementation 'org.springframework.boot:spring-boot-starter-test' // 테스트
-	testRuntimeOnly 'org.junit.platform:junit-platform-launcher' // 테스트 런처
-	developmentOnly 'org.springframework.boot:spring-boot-devtools' // 개발 도구
-	compileOnly 'org.projectlombok:lombok' // 롬복
-    annotationProcessor 'org.projectlombok:lombok' // 롬복
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+	developmentOnly 'org.springframework.boot:spring-boot-devtools'
 
-	// Flyway
-	implementation 'org.flywaydb:flyway-core' // Flyway
-	runtimeOnly 'org.postgresql:postgresql' // PostgreSQL
+
+	implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+	// Lombok
+	compileOnly 'org.projectlombok:lombok'
+	annotationProcessor 'org.projectlombok:lombok'
+
+	// PostgreSQL + Flyway
+	runtimeOnly 'org.postgresql:postgresql'
+	// Flyway 최신 버전 (PostgreSQL 18 지원)
+	implementation('org.flywaydb:flyway-core') {
+		version {
+			strictly '11.7.2'
+		}
+	}
+	implementation 'org.flywaydb:flyway-database-postgresql:11.7.2'
+
+	// Spring Security
+	implementation 'org.springframework.boot:spring-boot-starter-security'
+
+	// JWT (0.11.5 안정 버전 - IDE 인식을 위해 모두 implementation으로 설정)
+	implementation 'io.jsonwebtoken:jjwt-api:0.11.5'
+	implementation 'io.jsonwebtoken:jjwt-impl:0.11.5'
+	implementation 'io.jsonwebtoken:jjwt-jackson:0.11.5'
+
+	// Swagger / OpenAPI 문서화
+	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
+
+	// Jackson은 Spring Boot가 자동으로 버전 관리 (충돌 없음 확인됨)
 }
 
 tasks.named('test') {

@@ -1,27 +1,41 @@
-# Gradle/Build
+# Gradle
 .gradle/
 build/
-out/
-logs/
-*.log
-
-# Wrapper: 반드시 버전관리
-gradle/wrapper/
-!gradle/wrapper/gradle-wrapper.properties
 !gradle/wrapper/gradle-wrapper.jar
-!gradlew
-!gradlew.bat
+!**/src/main/**/build/
+!**/src/test/**/build/
 
 # IDE
 .idea/
 *.iml
-.project
+*.iws
+*.ipr
 .classpath
+.project
 .settings/
 bin/
-target/
 .vscode/
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~
+
+# Application specific
+application-local.properties
+application-prod.properties
+
+# 개발 가이드/블로그 작업 파일 (GitHub에는 업로드 안 함, 블로그용)
+API_TEST_GUIDE.md
+BLOG_*.md
+*_TROUBLESHOOTING.md
+IDE_FIX_*.md
+*_GUIDE.md

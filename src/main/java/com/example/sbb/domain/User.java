@@ -30,6 +30,9 @@ public class User {
     @Column(nullable = false)
     private String name;
 
+    @Column(nullable = false)
+    private String password;
+
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
