@@ -5,6 +5,9 @@ import lombok.Setter;
 
 import java.time.OffsetDateTime;
 
+/**
+ * 팀 정보 응답 DTO
+ */
 @Getter
 @Setter
 public class TeamResponse {

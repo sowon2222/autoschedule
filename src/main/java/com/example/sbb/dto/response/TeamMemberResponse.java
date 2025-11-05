@@ -4,6 +4,9 @@ import com.example.sbb.domain.Role;
 import lombok.Getter;
 import lombok.Setter;
 
+/**
+ * 팀 구성원 정보 응답 DTO
+ */
 @Getter
 @Setter
 public class TeamMemberResponse {

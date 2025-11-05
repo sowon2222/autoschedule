@@ -42,7 +42,9 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/**").permitAll()  // 인증 API는 모두 허용
                 .requestMatchers("/error").permitAll()  // 에러 페이지 허용
                 .requestMatchers(PathRequest.toStaticResources().atCommonLocations()).permitAll() // 정적 리소스 공통 경로 허용
-                .requestMatchers("/", "/index.html", "/login.html", "/signup.html").permitAll() // 루트 및 주요 페이지 허용
+                .requestMatchers("/", "/index.html", "/login.html", "/signup.html",
+                                 "/users.html", "/task.html", "/team.html", "/event.html").permitAll() // 루트 및 HTML 페이지 허용
+                .requestMatchers("/ws/**").permitAll() // 웹소켓 핸드셰이크 허용
                 .requestMatchers("/actuator/**").permitAll()  // Actuator (선택사항)
                 .requestMatchers("/hello").permitAll()  // 테스트 엔드포인트 허용
                 .anyRequest().authenticated()  // 나머지는 인증 필요
@@ -55,7 +57,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:3000", "http://localhost:8080"));  // 프론트엔드 주소
+        configuration.setAllowedOrigins(List.of("http://localhost:3000", "http://localhost:8080", "http://localhost:5173"));  // 프론트엔드 주소 (Vite 포함)
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setExposedHeaders(List.of("Authorization"));

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>이벤트 관리</title>
+  <link rel="icon" href="data:,">
+  <script src="/js/app.js"></script>
+  <style>
+    body { font-family: system-ui; margin:0; background:#f6f7f9; }
+    .container { max-width: 900px; margin: 0 auto; padding: 48px 20px; }
+    .card { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:24px; }
+    .row { display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
+    input { padding:10px 12px; border:1px solid #d1d5db; border-radius:10px; }
+    .btn { appearance:none; border:0; padding:10px 16px; border-radius:10px; font-weight:700; cursor:pointer; background:#2563eb; color:#fff; }
+    table { width:100%; border-collapse:collapse; }
+    th, td { text-align:left; padding:8px; border-bottom:1px solid #eee; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="card">
+    <h2>이벤트 생성</h2>
+    <div class="row">
+      <input id="teamId" placeholder="팀 ID" type="number">
+      <input id="title" placeholder="제목">
+      <input id="location" placeholder="장소">
+      <input id="startAt" placeholder="시작 (ISO)">
+      <input id="endAt" placeholder="종료 (ISO)">
+      <button class="btn" id="create">생성</button>
+      <a class="btn" style="background:#6b7280; text-decoration:none;" href="/">홈</a>
+    </div>
+    <h2>팀별 이벤트</h2>
+    <div class="row">
+      <input id="qTeam" placeholder="팀 ID" type="number">
+      <button class="btn" id="load">불러오기</button>
+    </div>
+    <table>
+      <thead><tr><th>ID</th><th>제목</th><th>장소</th><th>시작</th><th>종료</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+</div>
+<script>
+  async function load(teamId){
+    const res = await App.apiFetch(`/api/events/team/${teamId}`);
+    const rows = document.getElementById('rows');
+    rows.innerHTML = '';
+    if (!res.ok) return alert('조회 실패: '+(await res.text()));
+    const list = await res.json();
+    for (const e of list){
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${e.id}</td><td>${e.title}</td><td>${e.location ?? ''}</td><td>${e.startAt ?? ''}</td><td>${e.endAt ?? ''}</td>`;
+      rows.appendChild(tr);
+    }
+  }
+  document.getElementById('load').addEventListener('click', () => {
+    const teamId = Number(document.getElementById('qTeam').value);
+    if (!teamId) return alert('팀 ID 입력');
+    load(teamId);
+  });
+  document.getElementById('create').addEventListener('click', async () => {
+    const body = {
+      teamId: Number(document.getElementById('teamId').value),
+      title: document.getElementById('title').value,
+      location: document.getElementById('location').value || null,
+      startAt: document.getElementById('startAt').value,
+      endAt: document.getElementById('endAt').value
+    };
+    const res = await App.apiFetch('/api/events', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    if (!res.ok) return alert('생성 실패: '+(await res.text()));
+    if (body.teamId) load(body.teamId);
+  });
+</script>
+</body>
+</html>
+
+

@@ -13,6 +13,11 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 
+/**
+ * 팀 구성원 엔티티
+ * Team과 User의 다대다 관계를 표현하는 중간 엔티티입니다.
+ * 복합 키(TeamMemberId)를 사용하여 team_id와 user_id를 조합한 기본 키를 가집니다.
+ */
 @Entity
 @Table(name = "team_member")
 @Getter
@@ -35,7 +40,6 @@ public class TeamMember {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Role role = Role.MEMBER;
-
 }
 
 
