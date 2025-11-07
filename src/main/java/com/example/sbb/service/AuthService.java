@@ -93,7 +93,6 @@ public class AuthService {
 
         // 토큰에서 사용자 정보 추출
         Long userId = jwtUtil.getUserIdFromToken(refreshToken);
-        String email = jwtUtil.getEmailFromToken(refreshToken);
 
         // 사용자 존재 확인
         User user = userRepository.findById(userId)
