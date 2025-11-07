@@ -4,6 +4,7 @@ import com.example.sbb.dto.request.TaskCreateRequest;
 import com.example.sbb.dto.request.TaskUpdateRequest;
 import com.example.sbb.dto.response.TaskResponse;
 import com.example.sbb.service.TaskService;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -18,7 +19,7 @@ public class TaskController {
     public TaskController(TaskService taskService) { this.taskService = taskService; }
 
     @PostMapping
-    public ResponseEntity<TaskResponse> createTask(@RequestBody TaskCreateRequest request) {
+    public ResponseEntity<TaskResponse> createTask(@Valid @RequestBody TaskCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(taskService.createTask(request));
     }
 
@@ -38,7 +39,7 @@ public class TaskController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<TaskResponse> updateTask(@PathVariable Long id, @RequestBody TaskUpdateRequest request) {
+    public ResponseEntity<TaskResponse> updateTask(@PathVariable Long id, @Valid @RequestBody TaskUpdateRequest request) {
         return ResponseEntity.ok(taskService.updateTask(id, request));
     }
 

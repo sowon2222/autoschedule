@@ -30,6 +30,17 @@ public class CalendarEventService {
 
     @Transactional
     public CalendarEventResponse createEvent(CalendarEventCreateRequest request) {
+        // 일정 시간 검증: 종료 시간은 시작 시간 이후여야 함
+        if (request.getEndsAt() != null && request.getStartsAt() != null) {
+            if (request.getEndsAt().isBefore(request.getStartsAt()) || request.getEndsAt().isEqual(request.getStartsAt())) {
+                throw new IllegalArgumentException("종료 시간은 시작 시간 이후여야 합니다. 시작: " + request.getStartsAt() + ", 종료: " + request.getEndsAt());
+            }
+        } else if (request.getStartsAt() == null) {
+            throw new IllegalArgumentException("시작 시간은 필수입니다");
+        } else if (request.getEndsAt() == null) {
+            throw new IllegalArgumentException("종료 시간은 필수입니다");
+        }
+        
         CalendarEvent e = new CalendarEvent();
         Team team = teamRepository.findById(request.getTeamId())
             .orElseThrow(() -> new IllegalArgumentException("팀을 찾을 수 없습니다: " + request.getTeamId()));
@@ -78,6 +89,17 @@ public class CalendarEventService {
     public CalendarEventResponse updateEvent(Long id, CalendarEventUpdateRequest request) {
         CalendarEvent e = calendarEventRepository.findById(id)
             .orElseThrow(() -> new IllegalArgumentException("이벤트를 찾을 수 없습니다: " + id));
+        
+        // 일정 시간 검증: 종료 시간은 시작 시간 이후여야 함
+        OffsetDateTime startsAt = request.getStartsAt() != null ? request.getStartsAt() : e.getStartsAt();
+        OffsetDateTime endsAt = request.getEndsAt() != null ? request.getEndsAt() : e.getEndsAt();
+        
+        if (startsAt != null && endsAt != null) {
+            if (endsAt.isBefore(startsAt) || endsAt.isEqual(startsAt)) {
+                throw new IllegalArgumentException("종료 시간은 시작 시간 이후여야 합니다. 시작: " + startsAt + ", 종료: " + endsAt);
+            }
+        }
+        
         if (request.getTitle() != null) e.setTitle(request.getTitle());
         if (request.getLocation() != null) e.setLocation(request.getLocation());
         if (request.getStartsAt() != null) e.setStartsAt(request.getStartsAt());

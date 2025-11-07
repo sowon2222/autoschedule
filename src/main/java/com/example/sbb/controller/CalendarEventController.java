@@ -4,6 +4,7 @@ import com.example.sbb.dto.request.CalendarEventCreateRequest;
 import com.example.sbb.dto.request.CalendarEventUpdateRequest;
 import com.example.sbb.dto.response.CalendarEventResponse;
 import com.example.sbb.service.CalendarEventService;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -20,7 +21,7 @@ public class CalendarEventController {
     }
 
     @PostMapping
-    public ResponseEntity<CalendarEventResponse> create(@RequestBody CalendarEventCreateRequest request) {
+    public ResponseEntity<CalendarEventResponse> create(@Valid @RequestBody CalendarEventCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(calendarEventService.createEvent(request));
     }
 
@@ -58,7 +59,7 @@ public class CalendarEventController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<CalendarEventResponse> update(@PathVariable Long id, @RequestBody CalendarEventUpdateRequest request) {
+    public ResponseEntity<CalendarEventResponse> update(@PathVariable Long id, @Valid @RequestBody CalendarEventUpdateRequest request) {
         return ResponseEntity.ok(calendarEventService.updateEvent(id, request));
     }
 

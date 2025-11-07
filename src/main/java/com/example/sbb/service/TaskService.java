@@ -30,6 +30,18 @@ public class TaskService {
 
     @Transactional
     public TaskResponse createTask(TaskCreateRequest request) {
+        // 우선순위 검증 (1-5 범위)
+        Integer priority = request.getPriority() != null ? request.getPriority() : 3;
+        if (priority < 1 || priority > 5) {
+            throw new IllegalArgumentException("우선순위는 1부터 5 사이의 값이어야 합니다. 입력값: " + priority);
+        }
+        
+        // 마감일 검증 (과거 날짜가 아닌지 확인)
+        OffsetDateTime now = OffsetDateTime.now();
+        if (request.getDueAt() != null && request.getDueAt().isBefore(now)) {
+            throw new IllegalArgumentException("마감일은 현재 시간 이후여야 합니다. 입력값: " + request.getDueAt());
+        }
+        
         Task task = new Task();
         task.setTitle(request.getTitle());
         Team team = teamRepository.findById(request.getTeamId())
@@ -41,7 +53,7 @@ public class TaskService {
             task.setAssignee(assignee);
         }
         task.setDurationMin(request.getDurationMin());
-        task.setPriority(request.getPriority() != null ? request.getPriority() : 3);
+        task.setPriority(priority);
         task.setDueAt(request.getDueAt());
         task.setSplittable(request.getSplittable() == null || request.getSplittable());
         task.setTags(request.getTags());
@@ -69,6 +81,7 @@ public class TaskService {
     public TaskResponse updateTask(Long id, TaskUpdateRequest request) {
         Task task = taskRepository.findById(id)
             .orElseThrow(() -> new IllegalArgumentException("작업을 찾을 수 없습니다: " + id));
+        
         if (request.getTitle() != null) task.setTitle(request.getTitle());
         if (request.getAssigneeId() != null) {
             User assignee = userRepository.findById(request.getAssigneeId())
@@ -76,8 +89,24 @@ public class TaskService {
             task.setAssignee(assignee);
         }
         if (request.getDurationMin() != null) task.setDurationMin(request.getDurationMin());
-        if (request.getPriority() != null) task.setPriority(request.getPriority());
-        if (request.getDueAt() != null) task.setDueAt(request.getDueAt());
+        
+        // 우선순위 검증 (1-5 범위)
+        if (request.getPriority() != null) {
+            if (request.getPriority() < 1 || request.getPriority() > 5) {
+                throw new IllegalArgumentException("우선순위는 1부터 5 사이의 값이어야 합니다. 입력값: " + request.getPriority());
+            }
+            task.setPriority(request.getPriority());
+        }
+        
+        // 마감일 검증 (과거 날짜가 아닌지 확인)
+        if (request.getDueAt() != null) {
+            OffsetDateTime now = OffsetDateTime.now();
+            if (request.getDueAt().isBefore(now)) {
+                throw new IllegalArgumentException("마감일은 현재 시간 이후여야 합니다. 입력값: " + request.getDueAt());
+            }
+            task.setDueAt(request.getDueAt());
+        }
+        
         if (request.getSplittable() != null) task.setSplittable(request.getSplittable());
         if (request.getTags() != null) task.setTags(request.getTags());
         task.setUpdatedAt(OffsetDateTime.now());
