@@ -42,6 +42,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/**").permitAll()  // 인증 API는 모두 허용
                 .requestMatchers("/error").permitAll()  // 에러 페이지 허용
                 .requestMatchers(PathRequest.toStaticResources().atCommonLocations()).permitAll() // 정적 리소스 공통 경로 허용
+                .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll() // Swagger UI 및 OpenAPI 문서 허용
                 .requestMatchers("/", "/index.html", "/login.html", "/signup.html",
                                  "/users.html", "/task.html", "/team.html", "/event.html").permitAll() // 루트 및 HTML 페이지 허용
                 .requestMatchers("/ws/**").permitAll() // 웹소켓 핸드셰이크 허용
