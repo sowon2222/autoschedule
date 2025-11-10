@@ -10,5 +10,8 @@ export default defineConfig({
       '@fullcalendar/daygrid/main.css': path.resolve(__dirname, 'node_modules/@fullcalendar/daygrid/index.css'),
       '@fullcalendar/timegrid/main.css': path.resolve(__dirname, 'node_modules/@fullcalendar/timegrid/index.css')
     }
+  },
+  define: {
+    global: 'window'
   }
 })

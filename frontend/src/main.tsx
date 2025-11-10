@@ -1,3 +1,14 @@
+export {}
+
+declare global {
+  // eslint-disable-next-line no-var
+  var global: typeof globalThis | undefined
+}
+
+if (typeof globalThis.global === 'undefined') {
+  globalThis.global = globalThis
+}
+
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { createBrowserRouter, RouterProvider } from 'react-router-dom'
