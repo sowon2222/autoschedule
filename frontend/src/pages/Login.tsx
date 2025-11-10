@@ -16,6 +16,9 @@ export default function Login() {
     localStorage.setItem('refreshToken', data.refreshToken)
     localStorage.setItem('userEmail', data.email)
     localStorage.setItem('userName', data.name)
+    if (data.userId) {
+      localStorage.setItem('userId', String(data.userId))
+    }
     
     // 사용자 정보를 store에 설정
     setUser({

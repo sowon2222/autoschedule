@@ -1,10 +1,20 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import interactionPlugin from '@fullcalendar/interaction'
 import api from '../../lib/api'
+import type { StompSubscription } from '@stomp/stompjs'
+import {
+  createStompClient,
+  safeJsonParse
+} from '../../lib/ws'
+import type {
+  CalendarEventMessage,
+  ConflictAlertMessage,
+  TaskEventMessage
+} from '../../lib/ws'
 
 type CalendarEvent = {
   id: string
@@ -41,7 +51,13 @@ export default function Calendar() {
   const { id } = useParams()
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [teamBaseColor, setTeamBaseColor] = useState<string>('#3b82f6')
+  const [conflictAlert, setConflictAlert] = useState<ConflictAlertMessage | null>(null)
   const teamId = id ? parseInt(id) : 0
+  const teamColorRef = useRef<string>(teamBaseColor)
+
+  useEffect(() => {
+    teamColorRef.current = teamBaseColor
+  }, [teamBaseColor])
 
   // 팀별 색상 팔레트 (기본 색상)
   const teamColors = [
@@ -163,8 +179,145 @@ export default function Calendar() {
     loadCalendarData()
   }, [id, teamId])
 
+  useEffect(() => {
+    if (!id) return
+    const teamIdNum = Number(id)
+    const client = createStompClient()
+    const subscriptions: StompSubscription[] = []
+
+    const upsertCalendarEvent = (message: CalendarEventMessage) => {
+      if (message.eventId == null && !message.event) return
+      const eventId = message.eventId ?? message.event?.id
+      const calendarId = eventId != null ? `event-${eventId}` : undefined
+      if (message.action === 'DELETED' || !message.event) {
+        if (!calendarId) return
+        setEvents((prev) => prev.filter((entry) => entry.id !== calendarId))
+        return
+      }
+      const payload = message.event
+      const converted: CalendarEvent = {
+        id: `event-${payload.id}`,
+        title: payload.title,
+        start: payload.startsAt,
+        end: payload.endsAt,
+        backgroundColor: '#22c55e',
+        borderColor: '#16a34a',
+        extendedProps: {
+          type: 'event',
+          location: payload.location ?? undefined
+        }
+      }
+      setEvents((prev) => {
+        const index = prev.findIndex((entry) => entry.id === converted.id)
+        if (index >= 0) {
+          const copy = [...prev]
+          copy[index] = converted
+          return copy
+        }
+        return [...prev, converted]
+      })
+    }
+
+    const upsertTaskEvent = (message: TaskEventMessage) => {
+      const taskId = message.task?.id ?? message.taskId
+      if (!taskId) return
+      const calendarId = `task-${taskId}`
+      if (message.action === 'DELETED' || !message.task || !message.task.dueAt) {
+        setEvents((prev) => prev.filter((entry) => entry.id !== calendarId))
+        return
+      }
+      const dueDate = message.task.dueAt ? new Date(message.task.dueAt) : null
+      if (!dueDate) {
+        setEvents((prev) => prev.filter((entry) => entry.id !== calendarId))
+        return
+      }
+      const end = new Date(dueDate.getTime() + (message.task.durationMin ?? 0) * 60 * 1000)
+      const priority = message.task.priority ?? 3
+      const colors = getColorByPriority(teamColorRef.current, priority)
+      const converted: CalendarEvent = {
+        id: calendarId,
+        title: `📋 ${message.task.title}`,
+        start: dueDate.toISOString(),
+        end: end.toISOString(),
+        backgroundColor: colors.bg,
+        borderColor: colors.border,
+        extendedProps: {
+          type: 'task',
+          priority
+        }
+      }
+      setEvents((prev) => {
+        const index = prev.findIndex((entry) => entry.id === converted.id)
+        if (index >= 0) {
+          const copy = [...prev]
+          copy[index] = converted
+          return copy
+        }
+        return [...prev, converted]
+      })
+    }
+
+    const showConflictAlert = (message: ConflictAlertMessage) => {
+      setConflictAlert(message)
+      window.setTimeout(() => {
+        setConflictAlert((current) => (current === message ? null : current))
+      }, 8000)
+    }
+
+    client.onConnect = () => {
+      subscriptions.forEach((sub) => sub.unsubscribe())
+      subscriptions.length = 0
+      subscriptions.push(
+        client.subscribe(`/topic/calendar/${teamIdNum}`, (frame) => {
+          const payload = safeJsonParse<CalendarEventMessage>(frame.body)
+          if (!payload) return
+          upsertCalendarEvent(payload)
+        })
+      )
+      subscriptions.push(
+        client.subscribe(`/topic/tasks/${teamIdNum}`, (frame) => {
+          const payload = safeJsonParse<TaskEventMessage>(frame.body)
+          if (!payload) return
+          upsertTaskEvent(payload)
+        })
+      )
+      subscriptions.push(
+        client.subscribe(`/topic/conflicts/${teamIdNum}`, (frame) => {
+          const payload = safeJsonParse<ConflictAlertMessage>(frame.body)
+          if (!payload) return
+          showConflictAlert(payload)
+        })
+      )
+    }
+
+    client.activate()
+
+    return () => {
+      subscriptions.forEach((sub) => sub.unsubscribe())
+      client.deactivate()
+    }
+  }, [id])
+
   return (
     <div className="p-6">
+      {conflictAlert && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 shadow-sm">
+          <div className="font-semibold text-sm mb-1">일정 충돌 감지</div>
+          <div className="text-sm">{conflictAlert.message}</div>
+          {conflictAlert.conflicts?.length > 0 && (
+            <ul className="mt-2 space-y-1 text-xs text-red-600">
+              {conflictAlert.conflicts.map((conflict) => (
+                <li key={conflict.id}>
+                  • {conflict.title}{' '}
+                  <span className="text-[11px] text-red-500">
+                    ({new Date(conflict.startsAt).toLocaleString()} ~ {new Date(conflict.endsAt).toLocaleString()})
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
       <div className="mb-4">
         <h2 className="text-2xl font-bold mb-2">캘린더</h2>
         <div className="space-y-2">

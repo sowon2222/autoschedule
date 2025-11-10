@@ -1,11 +1,23 @@
-import axios from 'axios'
+import axios, { AxiosHeaders } from 'axios'
 
 const api = axios.create({ baseURL: 'http://localhost:8080' })
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('accessToken')
   if (token) {
-    config.headers = { ...(config.headers || {}), Authorization: `Bearer ${token}` }
+    if (!config.headers) {
+      config.headers = new AxiosHeaders()
+    }
+    if (config.headers instanceof AxiosHeaders) {
+      config.headers.set('Authorization', `Bearer ${token}`)
+    } else {
+      const existing =
+        typeof config.headers === 'object' ? (config.headers as Record<string, unknown>) : {}
+      config.headers = AxiosHeaders.from({
+        ...existing,
+        Authorization: `Bearer ${token}`
+      })
+    }
   }
   return config
 })

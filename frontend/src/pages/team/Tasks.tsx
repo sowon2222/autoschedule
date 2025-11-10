@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import api from '../../lib/api'
+import type { StompSubscription } from '@stomp/stompjs'
+import { createStompClient, safeJsonParse } from '../../lib/ws'
+import type { TaskEventMessage } from '../../lib/ws'
 
 type Task = { id: number; title: string; dueAt?: string; priority: number; durationMin: number }
 
@@ -26,6 +29,49 @@ export default function Tasks() {
 
   useEffect(() => {
     loadTasks()
+  }, [id])
+
+  useEffect(() => {
+    if (!id) return
+    const teamId = Number(id)
+    const client = createStompClient()
+    const subscriptions: StompSubscription[] = []
+
+    client.onConnect = () => {
+      subscriptions.forEach((sub) => sub.unsubscribe())
+      subscriptions.length = 0
+      subscriptions.push(
+        client.subscribe(`/topic/tasks/${teamId}`, (message) => {
+          const payload = safeJsonParse<TaskEventMessage>(message.body)
+          if (!payload) return
+          setList((prev) => {
+            if (payload.action === 'DELETED' && payload.taskId) {
+              return prev.filter((task) => task.id !== payload.taskId)
+            }
+            if (!payload.task) return prev
+            const nextTask: Task = {
+              id: payload.task.id,
+              title: payload.task.title,
+              durationMin: payload.task.durationMin,
+              dueAt: payload.task.dueAt ?? undefined,
+              priority: payload.task.priority ?? 3
+            }
+            const exists = prev.some((task) => task.id === nextTask.id)
+            if (exists) {
+              return prev.map((task) => (task.id === nextTask.id ? nextTask : task))
+            }
+            return [nextTask, ...prev]
+          })
+        })
+      )
+    }
+
+    client.activate()
+
+    return () => {
+      subscriptions.forEach((sub) => sub.unsubscribe())
+      client.deactivate()
+    }
   }, [id])
 
   const handleSubmit = async (e: React.FormEvent) => {

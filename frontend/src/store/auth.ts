@@ -16,6 +16,7 @@ export const useAuth = create<AuthState>((set) => ({
     localStorage.removeItem('refreshToken')
     localStorage.removeItem('userEmail')
     localStorage.removeItem('userName')
+    localStorage.removeItem('userId')
     set({ user: null })
     location.href = '/'
   }
