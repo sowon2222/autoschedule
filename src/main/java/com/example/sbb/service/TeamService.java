@@ -1,25 +1,25 @@
 package com.example.sbb.service;
 
+import com.example.sbb.domain.Role;
 import com.example.sbb.domain.Team;
 import com.example.sbb.domain.TeamMember;
 import com.example.sbb.domain.TeamMemberId;
 import com.example.sbb.domain.User;
-import com.example.sbb.domain.Role;
+import com.example.sbb.dto.event.CollaborationNotificationMessage;
 import com.example.sbb.dto.request.TeamCreateRequest;
-import com.example.sbb.dto.request.TeamUpdateRequest;
 import com.example.sbb.dto.request.TeamInviteRequest;
-import com.example.sbb.dto.response.TeamResponse;
+import com.example.sbb.dto.request.TeamUpdateRequest;
 import com.example.sbb.dto.response.TeamMemberResponse;
-import com.example.sbb.repository.TeamRepository;
+import com.example.sbb.dto.response.TeamResponse;
 import com.example.sbb.repository.TeamMemberRepository;
+import com.example.sbb.repository.TeamRepository;
 import com.example.sbb.repository.UserRepository;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
-
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 /**
  * 팀 및 팀 구성원 관리 서비스
@@ -29,11 +29,16 @@ public class TeamService {
     private final TeamRepository teamRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final UserRepository userRepository;
+    private final CollaborationEventPublisher eventPublisher;
 
-    public TeamService(TeamRepository teamRepository, TeamMemberRepository teamMemberRepository, UserRepository userRepository) {
+    public TeamService(TeamRepository teamRepository,
+                       TeamMemberRepository teamMemberRepository,
+                       UserRepository userRepository,
+                       CollaborationEventPublisher eventPublisher) {
         this.teamRepository = teamRepository;
         this.teamMemberRepository = teamMemberRepository;
         this.userRepository = userRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     // ========== 팀 관리 ==========
@@ -55,7 +60,16 @@ public class TeamService {
         team.setName(request.getName().trim());
         team.setCreatedAt(OffsetDateTime.now());
         Team saved = teamRepository.save(team);
-        return toResponse(saved);
+        TeamResponse response = toResponse(saved);
+        eventPublisher.publishNotification(
+            CollaborationNotificationMessage.team(
+                saved.getId(),
+                "TEAM_CREATED",
+                "새 팀 생성",
+                "팀 '" + saved.getName() + "' 이(가) 생성되었습니다.")
+        );
+        eventPublisher.publishDetailUpdate("team", saved.getId(), response);
+        return response;
     }
 
     /**
@@ -102,7 +116,16 @@ public class TeamService {
         }
 
         Team saved = teamRepository.save(team);
-        return toResponse(saved);
+        TeamResponse response = toResponse(saved);
+        eventPublisher.publishNotification(
+            CollaborationNotificationMessage.team(
+                saved.getId(),
+                "TEAM_UPDATED",
+                "팀 정보 수정",
+                "팀 '" + saved.getName() + "' 정보가 업데이트되었습니다.")
+        );
+        eventPublisher.publishDetailUpdate("team", saved.getId(), response);
+        return response;
     }
 
     /**
@@ -114,10 +137,16 @@ public class TeamService {
      */
     @Transactional
     public void deleteTeam(Long id) {
-        if (!teamRepository.existsById(id)) {
-            throw new IllegalArgumentException("팀을 찾을 수 없습니다: " + id);
-        }
-        teamRepository.deleteById(id);
+        Team team = teamRepository.findById(id)
+            .orElseThrow(() -> new IllegalArgumentException("팀을 찾을 수 없습니다: " + id));
+        teamRepository.delete(team);
+        eventPublisher.publishNotification(
+            CollaborationNotificationMessage.team(
+                team.getId(),
+                "TEAM_DELETED",
+                "팀 삭제",
+                "팀 '" + team.getName() + "' 이(가) 삭제되었습니다.")
+        );
     }
 
     // ========== 팀 구성원 관리 ==========
@@ -151,7 +180,27 @@ public class TeamService {
         member.setRole(request.getRole() != null ? request.getRole() : Role.MEMBER);
         teamMemberRepository.save(member);
 
-        return toMemberResponse(member);
+        CollaborationNotificationMessage messageForTeam = CollaborationNotificationMessage.team(
+            team.getId(),
+            "TEAM_MEMBER_ADDED",
+            "팀 구성원 추가",
+            "사용자 '" + user.getName() + "' 이(가) 팀에 합류했습니다."
+        );
+        eventPublisher.publishNotification(messageForTeam);
+
+        CollaborationNotificationMessage messageForUser = CollaborationNotificationMessage.user(
+            team.getId(),
+            user.getId(),
+            "TEAM_INVITE_ACCEPTED",
+            "팀 참여 확정",
+            "팀 '" + team.getName() + "' 에 참여가 완료되었습니다."
+        );
+        eventPublisher.publishNotification(messageForUser);
+
+        TeamMemberResponse response = toMemberResponse(member);
+        eventPublisher.publishDetailUpdate("teamMember", team.getId(), response);
+
+        return response;
     }
 
     /**
