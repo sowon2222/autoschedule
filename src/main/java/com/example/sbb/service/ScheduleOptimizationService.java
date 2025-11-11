@@ -23,6 +23,7 @@ public class ScheduleOptimizationService {
         ScheduleProgressMessage completion = ScheduleProgressMessage.completed(teamId, schedule);
         eventPublisher.publishScheduleProgress(completion);
         if (schedule != null) {
+            eventPublisher.publishScheduleBroadcast(schedule);
             eventPublisher.publishNotification(
                 CollaborationNotificationMessage.team(
                     teamId,

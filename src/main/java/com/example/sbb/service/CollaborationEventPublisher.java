@@ -5,6 +5,7 @@ import com.example.sbb.dto.event.CollaborationNotificationMessage;
 import com.example.sbb.dto.event.ConflictAlertMessage;
 import com.example.sbb.dto.event.ScheduleProgressMessage;
 import com.example.sbb.dto.event.TaskEventMessage;
+import com.example.sbb.dto.response.ScheduleResponse;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -45,6 +46,13 @@ public class CollaborationEventPublisher {
         } else {
             messagingTemplate.convertAndSend("/topic/schedules", message);
         }
+    }
+
+    public void publishScheduleBroadcast(ScheduleResponse schedule) {
+        if (schedule == null || schedule.getTeamId() == null) {
+            return;
+        }
+        messagingTemplate.convertAndSend("/topic/schedule." + schedule.getTeamId(), schedule);
     }
 
     public void publishConflictAlert(ConflictAlertMessage message) {

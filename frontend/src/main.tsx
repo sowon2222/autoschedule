@@ -32,6 +32,7 @@ const router = createBrowserRouter([
     path: '/team/:id',
     element: <TeamLayout />,
     children: [
+      { index: true, element: <Calendar /> },
       { path: 'calendar', element: <Calendar /> },
       { path: 'tasks', element: <Tasks /> },
       { path: 'workhours', element: <WorkHours /> },
