@@ -1,7 +1,18 @@
 import { Client } from '@stomp/stompjs'
 import SockJS from 'sockjs-client'
 
-const DEFAULT_WS_URL = import.meta.env.VITE_WS_URL ?? 'http://localhost:8080/ws'
+const DEFAULT_WS_URL = (() => {
+  const configured = import.meta.env.VITE_WS_URL
+  if (configured) return configured
+
+  if (typeof window !== 'undefined' && window.location) {
+    const { protocol, host } = window.location
+    const wsProtocol = protocol === 'https:' ? 'wss:' : 'ws:'
+    return `${wsProtocol}//${host}/ws`
+  }
+
+  return 'http://localhost:8080/ws'
+})()
 
 export type TaskPayload = {
   id: number
