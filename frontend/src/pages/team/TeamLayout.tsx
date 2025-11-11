@@ -1,3 +1,4 @@
+import Header from '../../components/Header'
 import { useEffect, useState } from 'react'
 import { Outlet, useParams } from 'react-router-dom'
 import type { StompSubscription } from '@stomp/stompjs'
@@ -87,7 +88,9 @@ export default function TeamLayout() {
   }, [teamId, userId])
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <>
+      <Header />
+      <div className="min-h-screen bg-gray-50">
       <div className="fixed top-20 right-6 z-50 flex w-80 flex-col gap-3">
         {scheduleProgress && (
           <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800 shadow-lg">
@@ -134,7 +137,8 @@ export default function TeamLayout() {
       <main className="mx-auto max-w-6xl px-4 py-6">
         <Outlet />
       </main>
-    </div>
+      </div>
+    </>
   )
 }
 

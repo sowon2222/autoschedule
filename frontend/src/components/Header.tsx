@@ -8,10 +8,24 @@ type Props = Record<string, never>
 type Team = { id: number; name: string }
 
 export default function Header(_: Props) {
-  const { user, logout } = useAuth()
+  const { user, logout, setUser } = useAuth()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [teams, setTeams] = useState<Team[]>([])
+
+  useEffect(() => {
+    if (user) return
+    const storedId = localStorage.getItem('userId')
+    const storedEmail = localStorage.getItem('userEmail')
+    const storedName = localStorage.getItem('userName')
+    if (storedId && storedEmail && storedName) {
+      setUser({
+        id: Number(storedId),
+        email: storedEmail,
+        name: storedName
+      })
+    }
+  }, [user, setUser])
 
   useEffect(() => {
     const load = async () => {
