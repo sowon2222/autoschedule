@@ -1,29 +1,35 @@
 package com.example.sbb.controller;
 
+import com.example.sbb.controller.support.AuthenticatedUserResolver;
 import com.example.sbb.dto.request.CalendarEventCreateRequest;
 import com.example.sbb.dto.request.CalendarEventUpdateRequest;
 import com.example.sbb.dto.response.CalendarEventResponse;
 import com.example.sbb.service.CalendarEventService;
+import com.example.sbb.service.SlotLockService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/events")
 @Tag(name = "Calendar Event API", description = "캘린더 이벤트 생성 및 조회/수정/삭제 API")
 public class CalendarEventController {
     private final CalendarEventService calendarEventService;
+    private final SlotLockService slotLockService;
+    private static final Duration EVENT_LOCK_TTL = Duration.ofMinutes(3);
 
-    public CalendarEventController(CalendarEventService calendarEventService) {
+    public CalendarEventController(CalendarEventService calendarEventService, SlotLockService slotLockService) {
         this.calendarEventService = calendarEventService;
+        this.slotLockService = slotLockService;
     }
 
     @PostMapping
@@ -33,7 +39,17 @@ public class CalendarEventController {
         @ApiResponse(responseCode = "400", description = "요청 검증 실패")
     })
     public ResponseEntity<CalendarEventResponse> create(@Valid @RequestBody CalendarEventCreateRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(calendarEventService.createEvent(request));
+        Long userId = AuthenticatedUserResolver.requireUserId();
+        String slotKey = buildEventCreateSlotKey(request);
+        if (!slotLockService.tryLock(slotKey, userId, EVENT_LOCK_TTL)) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).build();
+        }
+        try {
+            CalendarEventResponse response = calendarEventService.createEvent(request);
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        } finally {
+            slotLockService.releaseLock(slotKey, userId);
+        }
     }
 
     @GetMapping("/{id}")
@@ -87,7 +103,17 @@ public class CalendarEventController {
     public ResponseEntity<CalendarEventResponse> update(
         @Parameter(description = "이벤트 ID", example = "1") @PathVariable Long id,
         @Valid @RequestBody CalendarEventUpdateRequest request) {
-        return ResponseEntity.ok(calendarEventService.updateEvent(id, request));
+        Long userId = AuthenticatedUserResolver.requireUserId();
+        String slotKey = buildEventUpdateSlotKey(id);
+        if (!slotLockService.tryLock(slotKey, userId, EVENT_LOCK_TTL)) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).build();
+        }
+        try {
+            CalendarEventResponse response = calendarEventService.updateEvent(id, request);
+            return ResponseEntity.ok(response);
+        } finally {
+            slotLockService.releaseLock(slotKey, userId);
+        }
     }
 
     @DeleteMapping("/{id}")
@@ -97,8 +123,28 @@ public class CalendarEventController {
         @ApiResponse(responseCode = "404", description = "이벤트를 찾을 수 없음")
     })
     public ResponseEntity<Void> delete(@Parameter(description = "이벤트 ID", example = "1") @PathVariable Long id) {
-        calendarEventService.deleteEvent(id);
-        return ResponseEntity.noContent().build();
+        Long userId = AuthenticatedUserResolver.requireUserId();
+        String slotKey = buildEventUpdateSlotKey(id);
+        if (!slotLockService.tryLock(slotKey, userId, EVENT_LOCK_TTL)) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).build();
+        }
+        try {
+            calendarEventService.deleteEvent(id);
+            return ResponseEntity.noContent().build();
+        } finally {
+            slotLockService.releaseLock(slotKey, userId);
+        }
+    }
+
+    private String buildEventCreateSlotKey(CalendarEventCreateRequest request) {
+        OffsetDateTime start = request.getStartsAt() != null ? request.getStartsAt() : OffsetDateTime.now();
+        OffsetDateTime end = request.getEndsAt() != null ? request.getEndsAt() : start;
+        return "calendar:event:create:team:" + request.getTeamId()
+            + ":window:" + start.toInstant().toEpochMilli() + ":" + end.toInstant().toEpochMilli();
+    }
+
+    private String buildEventUpdateSlotKey(Long eventId) {
+        return "calendar:event:id:" + eventId;
     }
 }
 
