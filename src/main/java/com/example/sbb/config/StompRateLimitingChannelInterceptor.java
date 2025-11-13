@@ -42,6 +42,9 @@ public class StompRateLimitingChannelInterceptor implements ChannelInterceptor {
                 enforceRateLimit(accessor);  // 초과 전송 시 예외
                 enforcePayloadLimit(message); // 메시지 크기 제한
             }
+            case SUBSCRIBE -> {
+                enforceSubscribeRateLimit(accessor); // 구독 빈도 제한
+            }
             case DISCONNECT -> cleanup(accessor);
             default -> {
             }
@@ -93,11 +96,47 @@ public class StompRateLimitingChannelInterceptor implements ChannelInterceptor {
         }
     }
 
+    /**
+     * SUBSCRIBE 프레임에 대한 구독 빈도 제한을 적용합니다.
+     * 동일 사용자가 짧은 시간 내에 과도하게 많은 토픽을 구독하는 것을 방지합니다.
+     */
+    private void enforceSubscribeRateLimit(StompHeaderAccessor accessor) {
+        String key = resolveLimiterKey(accessor) + ":subscribe";
+        if (key == null) {
+            throw new MessageDeliveryException("Unauthenticated sessions cannot subscribe to topics");
+        }
+
+        long now = Instant.now().toEpochMilli();
+        long windowMillis = properties.getRateLimit().getWindowSeconds() * 1000L;
+        // 구독은 SEND보다 더 제한적으로 설정 (예: 10초에 20개)
+        int maxSubscribes = Math.max(20, properties.getRateLimit().getMaxMessages() / 3);
+
+        RateWindow window = windows.compute(key, (k, existing) -> {
+            if (existing == null || now - existing.windowStartMs >= windowMillis) {
+                return new RateWindow(now, 1);
+            }
+            int nextCount = existing.count + 1;
+            if (nextCount > maxSubscribes) {
+                existing.count = nextCount;
+                return existing;
+            }
+            existing.count = nextCount;
+            return existing;
+        });
+
+        if (window != null
+                && now - window.windowStartMs < windowMillis
+                && window.count > maxSubscribes) {
+            throw new MessageDeliveryException("Subscribe rate limit exceeded. Too many subscription attempts.");
+        }
+    }
+
     private void cleanup(StompHeaderAccessor accessor) {
         // 세션 종료 시 레이트 윈도우 캐시 정리
         String key = resolveLimiterKey(accessor);
         if (key != null) {
             windows.remove(key);
+            windows.remove(key + ":subscribe");
         }
     }
 
