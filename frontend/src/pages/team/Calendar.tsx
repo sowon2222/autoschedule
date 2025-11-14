@@ -4,6 +4,8 @@ import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import interactionPlugin from '@fullcalendar/interaction'
+import type { EventDropArg } from '@fullcalendar/core'
+import type { EventResizeDoneArg } from '@fullcalendar/interaction'
 import api from '../../lib/api'
 import type { StompSubscription } from '@stomp/stompjs'
 import {
@@ -23,6 +25,8 @@ type CalendarEvent = {
   end: string
   backgroundColor?: string
   borderColor?: string
+  editable?: boolean // FullCalendar 드래그/수정 가능 여부
+  durationEditable?: boolean // 하단 리사이즈 가능 여부 (시작 시간은 드래그로 변경)
   extendedProps?: {
     type: 'event' | 'task'
     location?: string
@@ -54,10 +58,148 @@ export default function Calendar() {
   const [conflictAlert, setConflictAlert] = useState<ConflictAlertMessage | null>(null)
   const teamId = id ? parseInt(id) : 0
   const teamColorRef = useRef<string>(teamBaseColor)
+  // 자신이 발생시킨 변경사항 추적 (중복 업데이트 방지)
+  const pendingUpdatesRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     teamColorRef.current = teamBaseColor
   }, [teamBaseColor])
+
+  // 일정/작업 드래그 핸들러 (이동)
+  const handleEventDrop = async (dropInfo: EventDropArg) => {
+    const event = dropInfo.event
+    const calendarId = event.id
+    
+    const newStart = event.start
+    const newEnd = event.end
+
+    if (!newStart || !newEnd) {
+      dropInfo.revert()
+      return
+    }
+
+    // 낙관적 업데이트: UI는 이미 변경됨
+    // 자신이 발생시킨 변경사항으로 표시
+    pendingUpdatesRef.current.add(calendarId)
+
+    try {
+      if (calendarId.startsWith('event-')) {
+        // Event 처리: startsAt, endsAt 변경
+        const eventId = parseInt(calendarId.replace('event-', ''))
+        if (isNaN(eventId)) {
+          dropInfo.revert()
+          pendingUpdatesRef.current.delete(calendarId)
+          return
+        }
+
+        await api.put(`/api/events/${eventId}`, {
+          startsAt: newStart.toISOString(),
+          endsAt: newEnd.toISOString()
+        })
+      } else if (calendarId.startsWith('task-')) {
+        // Task 처리: 드래그 시 마감일(dueAt) 변경
+        // - 전체 드래그: 마감일 이동 (시작 시간만 변경, 소요 시간 유지)
+        // - 상단 드래그: 시작 시간만 변경 (eventStartEditable=true로 인해 가능)
+        const taskId = parseInt(calendarId.replace('task-', ''))
+        if (isNaN(taskId)) {
+          dropInfo.revert()
+          pendingUpdatesRef.current.delete(calendarId)
+          return
+        }
+
+        await api.put(`/api/tasks/${taskId}`, {
+          dueAt: newStart.toISOString() // 드래그 시 마감일(시작 시간) 변경
+        })
+      } else {
+        dropInfo.revert()
+        pendingUpdatesRef.current.delete(calendarId)
+        return
+      }
+      // 성공 시 pendingUpdates에서 제거는 WebSocket 메시지 수신 시 처리됨
+    } catch (error) {
+      console.error('이동 실패:', error)
+      // 실패 시 롤백
+      dropInfo.revert()
+      pendingUpdatesRef.current.delete(calendarId)
+      
+      // 사용자에게 알림
+      const itemType = calendarId.startsWith('event-') ? '일정' : '작업'
+      alert(`${itemType} 이동에 실패했습니다. 다시 시도해주세요.`)
+    }
+  }
+
+  // 일정/작업 리사이즈 핸들러 (종료 시간만 변경)
+  // 하단 드래그만 가능 (시작 시간은 드래그로 변경)
+  const handleEventResize = async (resizeInfo: EventResizeDoneArg) => {
+    const event = resizeInfo.event
+    const calendarId = event.id
+
+    const newStart = event.start
+    const newEnd = event.end
+
+    if (!newStart || !newEnd) {
+      resizeInfo.revert()
+      return
+    }
+
+    // 낙관적 업데이트: UI는 이미 변경됨
+    // 자신이 발생시킨 변경사항으로 표시
+    pendingUpdatesRef.current.add(calendarId)
+
+    try {
+      if (calendarId.startsWith('event-')) {
+        // Event 처리: endsAt만 변경 (시작 시간은 드래그로 변경)
+        const eventId = parseInt(calendarId.replace('event-', ''))
+        if (isNaN(eventId)) {
+          resizeInfo.revert()
+          pendingUpdatesRef.current.delete(calendarId)
+          return
+        }
+
+        await api.put(`/api/events/${eventId}`, {
+          endsAt: newEnd.toISOString() // 종료 시간만 변경
+        })
+      } else if (calendarId.startsWith('task-')) {
+        // Task 처리: 소요 시간(durationMin)만 변경 (시작 시간은 드래그로 변경)
+        const taskId = parseInt(calendarId.replace('task-', ''))
+        if (isNaN(taskId)) {
+          resizeInfo.revert()
+          pendingUpdatesRef.current.delete(calendarId)
+          return
+        }
+
+        // 새로운 소요 시간 계산 (분 단위)
+        const durationMs = newEnd.getTime() - newStart.getTime()
+        const durationMin = Math.round(durationMs / (1000 * 60))
+
+        if (durationMin <= 0) {
+          resizeInfo.revert()
+          pendingUpdatesRef.current.delete(calendarId)
+          alert('작업 소요 시간은 0보다 커야 합니다.')
+          return
+        }
+
+        // 소요 시간(durationMin)만 업데이트 (시작 시간은 드래그로 변경)
+        await api.put(`/api/tasks/${taskId}`, {
+          durationMin: durationMin // 새로운 소요 시간만 변경
+        })
+      } else {
+        resizeInfo.revert()
+        pendingUpdatesRef.current.delete(calendarId)
+        return
+      }
+      // 성공 시 pendingUpdates에서 제거는 WebSocket 메시지 수신 시 처리됨
+    } catch (error) {
+      console.error('시간 변경 실패:', error)
+      // 실패 시 롤백
+      resizeInfo.revert()
+      pendingUpdatesRef.current.delete(calendarId)
+      
+      // 사용자에게 알림
+      const itemType = calendarId.startsWith('event-') ? '일정' : '작업'
+      alert(`${itemType} 시간 변경에 실패했습니다. 다시 시도해주세요.`)
+    }
+  }
 
   // 팀별 색상 팔레트 (기본 색상)
   const teamColors = [
@@ -139,6 +281,8 @@ export default function Calendar() {
             end: event.endsAt,
             backgroundColor: '#22c55e',
             borderColor: '#16a34a',
+            editable: true, // Event는 드래그/수정 가능
+            durationEditable: true, // 하단 리사이즈 가능 (시작 시간은 드래그로 변경)
             extendedProps: {
               type: 'event',
               location: event.location
@@ -162,6 +306,8 @@ export default function Calendar() {
               end: endDate.toISOString(),
               backgroundColor: colors.bg,
               borderColor: colors.border,
+              editable: true, // Task도 드래그/수정 가능
+              durationEditable: true, // 하단 리사이즈 가능 (시작 시간은 드래그로 변경)
               extendedProps: {
                 type: 'task',
                 priority: task.priority
@@ -189,6 +335,13 @@ export default function Calendar() {
       if (message.eventId == null && !message.event) return
       const eventId = message.eventId ?? message.event?.id
       const calendarId = eventId != null ? `event-${eventId}` : undefined
+      
+      // 자신이 발생시킨 변경사항이면 무시 (중복 업데이트 방지)
+      if (calendarId && pendingUpdatesRef.current.has(calendarId)) {
+        pendingUpdatesRef.current.delete(calendarId)
+        return
+      }
+      
       if (message.action === 'DELETED' || !message.event) {
         if (!calendarId) return
         setEvents((prev) => prev.filter((entry) => entry.id !== calendarId))
@@ -202,6 +355,8 @@ export default function Calendar() {
         end: payload.endsAt,
         backgroundColor: '#22c55e',
         borderColor: '#16a34a',
+        editable: true, // Event는 드래그/수정 가능
+        durationEditable: true, // 하단 리사이즈 가능 (시작 시간은 드래그로 변경)
         extendedProps: {
           type: 'event',
           location: payload.location ?? undefined
@@ -222,6 +377,13 @@ export default function Calendar() {
       const taskId = message.task?.id ?? message.taskId
       if (!taskId) return
       const calendarId = `task-${taskId}`
+      
+      // 자신이 발생시킨 변경사항이면 무시 (중복 업데이트 방지)
+      if (pendingUpdatesRef.current.has(calendarId)) {
+        pendingUpdatesRef.current.delete(calendarId)
+        return
+      }
+      
       if (message.action === 'DELETED' || !message.task || !message.task.dueAt) {
         setEvents((prev) => prev.filter((entry) => entry.id !== calendarId))
         return
@@ -241,6 +403,8 @@ export default function Calendar() {
         end: end.toISOString(),
         backgroundColor: colors.bg,
         borderColor: colors.border,
+        editable: true, // Task도 드래그/수정 가능
+        durationEditable: true, // 하단 리사이즈 가능 (시작 시간은 드래그로 변경)
         extendedProps: {
           type: 'task',
           priority
@@ -346,6 +510,11 @@ export default function Calendar() {
           right: 'dayGridMonth,timeGridWeek,timeGridDay'
         }}
         events={events}
+        editable={true}
+        eventStartEditable={false}
+        eventDurationEditable={true}
+        eventDrop={handleEventDrop}
+        eventResize={handleEventResize}
         height="auto"
         locale="ko"
         buttonText={{

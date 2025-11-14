@@ -112,12 +112,8 @@ public class TaskService {
             task.setPriority(request.getPriority());
         }
         
-        // 마감일 검증 (과거 날짜가 아닌지 확인)
+        // 마감일 업데이트 (과거 날짜도 허용 - 드래그로 이동 가능)
         if (request.getDueAt() != null) {
-            OffsetDateTime now = OffsetDateTime.now();
-            if (request.getDueAt().isBefore(now)) {
-                throw new IllegalArgumentException("마감일은 현재 시간 이후여야 합니다. 입력값: " + request.getDueAt());
-            }
             task.setDueAt(request.getDueAt());
         }
         

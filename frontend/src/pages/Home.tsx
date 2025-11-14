@@ -171,7 +171,7 @@ export default function Home() {
         })
       }
 
-      // 각 팀의 Task 변환 (마감일이 있고, 담당자가 사용자이거나 담당자가 없는 Task만, 중복 제거)
+      // 각 팀의 Task 변환 (마감일이 있는 모든 Task 표시, 중복 제거)
       tasksResponses.forEach((tasksResponse: any, teamIndex: number) => {
         if (tasksResponse.data && Array.isArray(tasksResponse.data)) {
           // 현재 팀 정보 가져오기
@@ -186,8 +186,8 @@ export default function Home() {
               return
             }
             
-            // 마감일이 있고, 담당자가 사용자이거나 담당자가 없는 Task만 표시
-            if (task.dueAt && (!task.assigneeId || task.assigneeId === userId)) {
+            // 마감일이 있는 모든 Task 표시
+            if (task.dueAt) {
               const startDate = new Date(task.dueAt)
               if (isNaN(startDate.getTime())) {
                 console.warn('Invalid date for task:', task)
