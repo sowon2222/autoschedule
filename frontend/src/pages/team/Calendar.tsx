@@ -463,67 +463,143 @@ export default function Calendar() {
   }, [id])
 
   return (
-    <div className="p-6">
+    <div className="p-6 bg-gradient-to-br from-gray-50 to-white min-h-screen">
       {conflictAlert && (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 shadow-sm">
-          <div className="font-semibold text-sm mb-1">일정 충돌 감지</div>
-          <div className="text-sm">{conflictAlert.message}</div>
+        <div className="mb-6 rounded-xl border-2 border-red-300 bg-gradient-to-r from-red-50 to-red-100 p-5 text-red-800 shadow-lg animate-pulse">
+          <div className="flex items-center gap-2 mb-2">
+            <svg className="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+            <div className="font-bold text-base">일정 충돌 감지</div>
+          </div>
+          <div className="text-sm font-medium">{conflictAlert.message}</div>
           {conflictAlert.conflicts?.length > 0 && (
-            <ul className="mt-2 space-y-1 text-xs text-red-600">
+            <ul className="mt-3 space-y-2 text-xs text-red-700 bg-white/50 rounded-lg p-3">
               {conflictAlert.conflicts.map((conflict) => (
-                <li key={conflict.id}>
-                  • {conflict.title}{' '}
-                  <span className="text-[11px] text-red-500">
-                    ({new Date(conflict.startsAt).toLocaleString()} ~ {new Date(conflict.endsAt).toLocaleString()})
-                  </span>
+                <li key={conflict.id} className="flex items-start gap-2">
+                  <span className="text-red-500 mt-0.5">•</span>
+                  <div>
+                    <span className="font-semibold">{conflict.title}</span>
+                    <span className="ml-2 text-red-600">
+                      ({new Date(conflict.startsAt).toLocaleString()} ~ {new Date(conflict.endsAt).toLocaleString()})
+                    </span>
+                  </div>
                 </li>
               ))}
             </ul>
           )}
         </div>
       )}
-      <div className="mb-4">
-        <h2 className="text-2xl font-bold mb-2">캘린더</h2>
-        <div className="space-y-2">
-          <div className="flex gap-4 text-sm flex-wrap">
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-green-500"></div>
-              <span>일정 (Event)</span>
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-3xl font-extrabold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+            캘린더
+          </h2>
+        </div>
+        <div className="bg-white rounded-xl shadow-md p-5 border border-gray-200">
+          <div className="space-y-3">
+            <div className="flex gap-6 text-sm flex-wrap">
+              <div className="flex items-center gap-2.5 px-3 py-2 bg-green-50 rounded-lg border border-green-200">
+                <div className="w-4 h-4 rounded-full bg-gradient-to-br from-green-500 to-green-600 shadow-sm"></div>
+                <span className="font-medium text-gray-700">일정 (Event)</span>
+              </div>
+              <div className="flex items-center gap-2.5 px-3 py-2 bg-blue-50 rounded-lg border border-blue-200">
+                <div className="w-4 h-4 rounded-full shadow-sm" style={{ backgroundColor: teamBaseColor }}></div>
+                <span className="font-medium text-gray-700">작업 (Task) - 팀 색상</span>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded" style={{ backgroundColor: teamBaseColor }}></div>
-              <span>작업 (Task) - 팀 색상</span>
+            <div className="text-xs text-gray-600 bg-gray-50 rounded-lg px-3 py-2 border border-gray-200">
+              <span className="font-semibold text-gray-700">우선순위 색상 진하기:</span> 
+              <span className="ml-2">1(가장 진함) → 5(가장 연함)</span>
             </div>
-          </div>
-          <div className="text-xs text-gray-600">
-            <span className="font-semibold">우선순위 색상 진하기:</span> 
-            <span className="ml-2">1(가장 진함) → 5(가장 연함)</span>
           </div>
         </div>
       </div>
-      <FullCalendar
-        plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-        initialView="timeGridWeek"
-        headerToolbar={{
-          left: 'prev,next today',
-          center: 'title',
-          right: 'dayGridMonth,timeGridWeek,timeGridDay'
-        }}
-        events={events}
-        editable={true}
-        eventStartEditable={false}
-        eventDurationEditable={true}
-        eventDrop={handleEventDrop}
-        eventResize={handleEventResize}
-        height="auto"
-        locale="ko"
-        buttonText={{
-          today: '오늘',
-          month: '월',
-          week: '주',
-          day: '일'
-        }}
-      />
+      <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+        <style>{`
+          .fc-header-toolbar {
+            margin-bottom: 2rem !important;
+            padding: 1.5rem !important;
+            background: linear-gradient(to right, #f8fafc, #ffffff) !important;
+            border-bottom: 1px solid #e5e7eb !important;
+          }
+          .fc-toolbar-title {
+            font-size: 1.75rem !important;
+            font-weight: 800 !important;
+            background: linear-gradient(to right, #3b82f6, #8b5cf6) !important;
+            -webkit-background-clip: text !important;
+            -webkit-text-fill-color: transparent !important;
+            background-clip: text !important;
+          }
+          .fc-button {
+            background: #f3f4f6 !important;
+            border: 1px solid #d1d5db !important;
+            color: #374151 !important;
+            font-weight: 500 !important;
+            padding: 0.5rem 1rem !important;
+            border-radius: 0.5rem !important;
+            transition: all 0.2s !important;
+          }
+          .fc-button:hover {
+            background: #e5e7eb !important;
+            transform: translateY(-1px) !important;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+          }
+          .fc-button-active {
+            background: linear-gradient(to right, #3b82f6, #8b5cf6) !important;
+            border-color: #3b82f6 !important;
+            color: white !important;
+          }
+          .fc-daygrid-day {
+            border-color: #e5e7eb !important;
+          }
+          .fc-day-today {
+            background: #fef3c7 !important;
+          }
+          .fc-event {
+            border-radius: 0.375rem !important;
+            border: none !important;
+            padding: 2px 4px !important;
+            font-weight: 500 !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+            transition: all 0.2s !important;
+          }
+          .fc-event:hover {
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15) !important;
+            transform: translateY(-1px) !important;
+          }
+          .fc-col-header-cell {
+            background: #f9fafb !important;
+            border-color: #e5e7eb !important;
+            font-weight: 600 !important;
+            color: #374151 !important;
+            padding: 0.75rem !important;
+          }
+        `}</style>
+        <FullCalendar
+          plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+          initialView="timeGridWeek"
+          headerToolbar={{
+            left: 'prev,next today',
+            center: 'title',
+            right: 'dayGridMonth,timeGridWeek,timeGridDay'
+          }}
+          events={events}
+          editable={true}
+          eventStartEditable={false}
+          eventDurationEditable={true}
+          eventDrop={handleEventDrop}
+          eventResize={handleEventResize}
+          height="auto"
+          locale="ko"
+          buttonText={{
+            today: '오늘',
+            month: '월',
+            week: '주',
+            day: '일'
+          }}
+        />
+      </div>
     </div>
   )
 }
