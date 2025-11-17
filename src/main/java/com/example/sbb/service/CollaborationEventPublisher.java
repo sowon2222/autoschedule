@@ -65,11 +65,16 @@ public class CollaborationEventPublisher {
 
     public void publishNotification(CollaborationNotificationMessage message) {
         if ("USER".equalsIgnoreCase(message.scope()) && message.targetId() != null) {
-            messagingTemplate.convertAndSend("/topic/notifications/user/" + message.targetId(), message);
+            String userTopic = "/topic/notifications/user/" + message.targetId();
+            System.out.println("[Notification] Publishing to user topic: " + userTopic + ", message: " + message.title());
+            messagingTemplate.convertAndSend(userTopic, message);
         }
         if (message.teamId() != null) {
-            messagingTemplate.convertAndSend("/topic/notifications/team/" + message.teamId(), message);
+            String teamTopic = "/topic/notifications/team/" + message.teamId();
+            System.out.println("[Notification] Publishing to team topic: " + teamTopic + ", message: " + message.title());
+            messagingTemplate.convertAndSend(teamTopic, message);
         } else if (!StringUtils.hasText(message.scope()) || "BROADCAST".equalsIgnoreCase(message.scope())) {
+            System.out.println("[Notification] Publishing to broadcast topic: /topic/notifications, message: " + message.title());
             messagingTemplate.convertAndSend("/topic/notifications", message);
         }
     }
