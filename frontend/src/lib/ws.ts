@@ -2,9 +2,33 @@ import { Client } from '@stomp/stompjs'
 import SockJS from 'sockjs-client'
 
 const DEFAULT_WS_URL = (() => {
+  // 환경 변수로 명시적으로 설정된 경우 사용
   const configured = import.meta.env.VITE_WS_URL
   if (configured) return configured
 
+  // API 베이스 URL이 설정되어 있으면 해당 호스트 사용
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL
+  if (apiBaseUrl && apiBaseUrl.trim() !== '') {
+    try {
+      // 절대 URL인 경우
+      const url = new URL(apiBaseUrl)
+      const wsProtocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+      return `${wsProtocol}//${url.host}/ws`
+    } catch {
+      // 상대 경로인 경우 (빈 문자열 등) - 현재 페이지 호스트 사용
+      // 개발 환경에서는 백엔드 포트 사용
+      if (import.meta.env.DEV) {
+        return 'http://localhost:8080/ws'
+      }
+    }
+  }
+
+  // 개발 환경: 백엔드가 8080 포트에서 실행
+  if (import.meta.env.DEV) {
+    return 'http://localhost:8080/ws'
+  }
+
+  // 프로덕션: 현재 페이지의 호스트 사용 (EC2에서는 프론트엔드가 8080에 포함됨)
   if (typeof window !== 'undefined' && window.location) {
     const { protocol, host } = window.location
     const wsProtocol = protocol === 'https:' ? 'wss:' : 'ws:'
@@ -93,12 +117,33 @@ export function createStompClient(config?: Partial<ClientConfig>) {
   const token = localStorage.getItem('accessToken')
   const url = DEFAULT_WS_URL
 
+  // 디버깅: WebSocket URL과 토큰 상태 로그
+  console.log('[WebSocket] Connecting to:', url)
+  console.log('[WebSocket] Token present:', !!token)
+
+  // debug 함수 정의
+  const debugFn = (str: string) => {
+    // 프로덕션에서도 중요한 로그는 출력
+    if (str.includes('CONNECTED') || str.includes('ERROR') || str.includes('SUBSCRIBE')) {
+      console.log('[STOMP]', str)
+    } else if (import.meta.env.DEV) {
+      console.debug('[STOMP]', str)
+    }
+  }
+
   const client = new Client({
-    webSocketFactory: () => new SockJS(url),
+    ...config,
+    webSocketFactory: () => {
+      console.log('[WebSocket] Creating SockJS connection to:', url)
+      // iframe/jsonp transport는 제외 (보안상 권장되지 않음, 콘솔 에러 감소)
+      return new SockJS(url, null, {
+        transports: ['websocket', 'xhr-streaming', 'xhr-polling']
+      })
+    },
     reconnectDelay: 5000,
-    debug: import.meta.env.DEV ? (str) => console.debug('[STOMP]', str) : undefined,
     connectHeaders: token ? { Authorization: `Bearer ${token}` } : undefined,
-    ...config
+    // config에 debug가 없으면 우리가 정의한 것 사용
+    debug: config?.debug ?? debugFn
   })
 
   client.onStompError = (frame) => {
