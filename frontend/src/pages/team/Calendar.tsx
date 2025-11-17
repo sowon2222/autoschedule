@@ -375,21 +375,36 @@ export default function Calendar() {
 
     const upsertTaskEvent = (message: TaskEventMessage) => {
       const taskId = message.task?.id ?? message.taskId
-      if (!taskId) return
+      if (!taskId) {
+        console.warn('[Calendar] Task event missing taskId:', message)
+        return
+      }
       const calendarId = `task-${taskId}`
       
       // 자신이 발생시킨 변경사항이면 무시 (중복 업데이트 방지)
       if (pendingUpdatesRef.current.has(calendarId)) {
+        console.log('[Calendar] Ignoring own update for task:', taskId)
         pendingUpdatesRef.current.delete(calendarId)
         return
       }
       
-      if (message.action === 'DELETED' || !message.task || !message.task.dueAt) {
+      // 삭제된 작업이거나 작업 정보가 없으면 캘린더에서 제거
+      if (message.action === 'DELETED' || !message.task) {
+        console.log('[Calendar] Removing task from calendar:', taskId, message.action)
         setEvents((prev) => prev.filter((entry) => entry.id !== calendarId))
         return
       }
-      const dueDate = message.task.dueAt ? new Date(message.task.dueAt) : null
-      if (!dueDate) {
+      
+      // 마감일시가 없으면 캘린더에 표시하지 않음 (작업 목록에는 표시됨)
+      if (!message.task.dueAt) {
+        console.log('[Calendar] Task has no dueAt, skipping calendar display:', taskId)
+        setEvents((prev) => prev.filter((entry) => entry.id !== calendarId))
+        return
+      }
+      
+      const dueDate = new Date(message.task.dueAt)
+      if (isNaN(dueDate.getTime())) {
+        console.warn('[Calendar] Invalid dueAt date:', message.task.dueAt)
         setEvents((prev) => prev.filter((entry) => entry.id !== calendarId))
         return
       }
@@ -429,19 +444,25 @@ export default function Calendar() {
     }
 
     client.onConnect = () => {
+      console.log('[Calendar] WebSocket connected, subscribing to topics')
       subscriptions.forEach((sub) => sub.unsubscribe())
       subscriptions.length = 0
       subscriptions.push(
         client.subscribe(`/topic/calendar/${teamIdNum}`, (frame) => {
           const payload = safeJsonParse<CalendarEventMessage>(frame.body)
           if (!payload) return
+          console.log('[Calendar] Received calendar event:', payload)
           upsertCalendarEvent(payload)
         })
       )
       subscriptions.push(
         client.subscribe(`/topic/tasks/${teamIdNum}`, (frame) => {
           const payload = safeJsonParse<TaskEventMessage>(frame.body)
-          if (!payload) return
+          if (!payload) {
+            console.warn('[Calendar] Failed to parse task event:', frame.body)
+            return
+          }
+          console.log('[Calendar] Received task event:', payload)
           upsertTaskEvent(payload)
         })
       )
@@ -452,6 +473,14 @@ export default function Calendar() {
           showConflictAlert(payload)
         })
       )
+    }
+
+    client.onStompError = (frame) => {
+      console.error('[Calendar] STOMP error:', frame.headers['message'], frame.body)
+    }
+
+    client.onWebSocketError = (event) => {
+      console.error('[Calendar] WebSocket error:', event)
     }
 
     client.activate()

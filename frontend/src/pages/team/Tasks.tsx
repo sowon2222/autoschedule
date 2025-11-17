@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import api from '../../lib/api'
 import type { StompSubscription } from '@stomp/stompjs'
@@ -11,6 +11,7 @@ export default function Tasks() {
   const { id } = useParams()
   const [list, setList] = useState<Task[]>([])
   const [modalOpen, setModalOpen] = useState(false)
+  const [newTaskIds, setNewTaskIds] = useState<Set<number>>(new Set())
   const [formData, setFormData] = useState({
     title: '',
     durationMin: 60,
@@ -36,16 +37,39 @@ export default function Tasks() {
     const teamId = Number(id)
     const client = createStompClient()
     const subscriptions: StompSubscription[] = []
+    setWsStatus('connecting')
+
+    // 연결 타임아웃 (10초)
+    const connectTimeout = setTimeout(() => {
+      if (wsStatusRef.current === 'connecting') {
+        console.error('[Tasks] WebSocket connection timeout after 10 seconds')
+        setWsStatus('disconnected')
+        client.deactivate()
+      }
+    }, 10000)
 
     client.onConnect = () => {
+      clearTimeout(connectTimeout)
+      console.log('[Tasks] WebSocket connected, subscribing to /topic/tasks/' + teamId)
+      setWsStatus('connected')
       subscriptions.forEach((sub) => sub.unsubscribe())
       subscriptions.length = 0
       subscriptions.push(
         client.subscribe(`/topic/tasks/${teamId}`, (message) => {
           const payload = safeJsonParse<TaskEventMessage>(message.body)
-          if (!payload) return
+          if (!payload) {
+            console.warn('[Tasks] Failed to parse task event:', message.body)
+            return
+          }
+          console.log('[Tasks] Received task event:', payload)
+          setWsMessageCount(prev => prev + 1)
           setList((prev) => {
             if (payload.action === 'DELETED' && payload.taskId) {
+              setNewTaskIds((ids) => {
+                const next = new Set(ids)
+                next.delete(payload.taskId!)
+                return next
+              })
               return prev.filter((task) => task.id !== payload.taskId)
             }
             if (!payload.task) return prev
@@ -60,17 +84,50 @@ export default function Tasks() {
             if (exists) {
               return prev.map((task) => (task.id === nextTask.id ? nextTask : task))
             }
+            // 새 작업이 추가될 때 하이라이트 효과를 위해 ID 저장
+            if (payload.action === 'CREATED') {
+              setNewTaskIds((ids) => new Set([...ids, nextTask.id]))
+              // 3초 후 하이라이트 제거
+              setTimeout(() => {
+                setNewTaskIds((ids) => {
+                  const next = new Set(ids)
+                  next.delete(nextTask.id)
+                  return next
+                })
+              }, 3000)
+            }
             return [nextTask, ...prev]
           })
         })
       )
     }
 
+    client.onStompError = (frame) => {
+      clearTimeout(connectTimeout)
+      console.error('[Tasks] STOMP error:', frame.headers['message'], frame.body)
+      setWsStatus('disconnected')
+    }
+
+    client.onWebSocketError = (event) => {
+      clearTimeout(connectTimeout)
+      console.error('[Tasks] WebSocket error:', event)
+      setWsStatus('disconnected')
+    }
+
+    client.onDisconnect = () => {
+      clearTimeout(connectTimeout)
+      console.log('[Tasks] WebSocket disconnected')
+      setWsStatus('disconnected')
+    }
+
     client.activate()
 
     return () => {
+      clearTimeout(connectTimeout)
       subscriptions.forEach((sub) => sub.unsubscribe())
       client.deactivate()
+      setWsStatus('disconnected')
+      setWsMessageCount(0)
     }
   }, [id])
 
@@ -89,7 +146,8 @@ export default function Tasks() {
         splittable: formData.splittable,
         tags: formData.tags || null
       }
-      await api.post('/api/tasks', payload)
+      const response = await api.post('/api/tasks', payload)
+      console.log('[Tasks] Task created:', response.data)
       setModalOpen(false)
       setFormData({
         title: '',
@@ -100,22 +158,49 @@ export default function Tasks() {
         splittable: true,
         tags: ''
       })
+      // WebSocket으로 다른 팀원들에게는 자동으로 전송되지만,
+      // 작업 생성자에게도 즉시 반영되도록 목록 새로고침
       loadTasks()
     } catch (error: any) {
       alert(error.response?.data?.message || '작업 추가에 실패했습니다.')
     }
   }
 
+  const [wsStatus, setWsStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected')
+  const [wsMessageCount, setWsMessageCount] = useState(0)
+  const wsStatusRef = useRef<'connecting' | 'connected' | 'disconnected'>('disconnected')
+
+  useEffect(() => {
+    wsStatusRef.current = wsStatus
+  }, [wsStatus])
+
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-2xl font-bold">작업 목록</h2>
-        <button
-          onClick={() => setModalOpen(true)}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-        >
-          작업 추가
-        </button>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 text-sm">
+            <div className={`w-2 h-2 rounded-full ${
+              wsStatus === 'connected' ? 'bg-green-500' : 
+              wsStatus === 'connecting' ? 'bg-yellow-500 animate-pulse' : 
+              'bg-red-500'
+            }`} />
+            <span className="text-gray-600">
+              {wsStatus === 'connected' ? 'WebSocket 연결됨' : 
+               wsStatus === 'connecting' ? '연결 중...' : 
+               '연결 안됨'}
+            </span>
+            {wsStatus === 'connected' && wsMessageCount > 0 && (
+              <span className="text-gray-500">({wsMessageCount}개 메시지 수신)</span>
+            )}
+          </div>
+          <button
+            onClick={() => setModalOpen(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            작업 추가
+          </button>
+        </div>
       </div>
 
       <table className="w-full border">
@@ -129,8 +214,21 @@ export default function Tasks() {
         </thead>
         <tbody>
           {list.map(t => (
-            <tr key={t.id}>
-              <td className="p-2 border">{t.title}</td>
+            <tr 
+              key={t.id}
+              className={newTaskIds.has(t.id) ? 'bg-green-50 animate-pulse' : ''}
+              style={{
+                transition: 'background-color 0.3s ease-out'
+              }}
+            >
+              <td className="p-2 border">
+                {newTaskIds.has(t.id) && (
+                  <span className="inline-block mr-2 px-2 py-0.5 text-xs bg-green-500 text-white rounded">
+                    새 작업
+                  </span>
+                )}
+                {t.title}
+              </td>
               <td className="p-2 border">{t.durationMin}</td>
               <td className="p-2 border">{t.dueAt ? new Date(t.dueAt).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' }) : '-'}</td>
               <td className="p-2 border">{t.priority}</td>
