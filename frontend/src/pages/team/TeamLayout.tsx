@@ -57,7 +57,11 @@ export default function TeamLayout() {
       subscriptions.push(
         client.subscribe(`/topic/notifications/team/${teamId}`, (frame) => {
           const payload = safeJsonParse<CollaborationNotificationMessage>(frame.body)
-          if (!payload) return
+          if (!payload) {
+            console.warn('[TeamLayout] Failed to parse notification:', frame.body)
+            return
+          }
+          console.log('[TeamLayout] Received team notification:', payload.title, 'for team:', teamId)
           pushNotification(payload)
         })
       )
