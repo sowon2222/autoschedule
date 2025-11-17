@@ -39,9 +39,9 @@
 
 ## 현재 진행 상황
 - [x] Day 1 — 기능 구체화 & DB 스키마 설계  
-- [ ] Day 2 — JPA 엔티티 구현  
-- [ ] Day 3 — CRUD API 개발  
-- [ ] Day 8 — WebSocket 실시간 연동  
+- [x] Day 2 — JPA 엔티티 구현  
+- [x] Day 3 — CRUD API 개발  
+- [x] Day 8 — WebSocket 실시간 연동  
 - [ ] Day 15 — 자동 스케줄링 로직  
 - [ ] Day 26 — AWS 배포  
 - [ ] Day 30 — 프로젝트 완료 🎉
