@@ -6,6 +6,9 @@ import timeGridPlugin from '@fullcalendar/timegrid'
 import interactionPlugin from '@fullcalendar/interaction'
 import api from '../lib/api'
 import { useAuth } from '../store/auth'
+import type { StompSubscription } from '@stomp/stompjs'
+import { createStompClient, safeJsonParse } from '../lib/ws'
+import type { CollaborationNotificationMessage } from '../lib/ws'
 
 type CalendarEventItem = {
   id: string
@@ -23,9 +26,16 @@ type CalendarEventItem = {
   }
 }
 
+type ToastItem = {
+  id: number
+  data: CollaborationNotificationMessage
+}
+
 export default function Home() {
   const { user, logout, setUser } = useAuth()
   const [events, setEvents] = useState<CalendarEventItem[]>([])
+  const [notifications, setNotifications] = useState<ToastItem[]>([])
+  const [userTeams, setUserTeams] = useState<Array<{ id: number; name: string }>>([])
 
   // 팀별 색상 팔레트 (기본 색상)
   const teamColors = [
@@ -87,6 +97,7 @@ export default function Home() {
       // 사용자가 속한 팀 목록 조회
       const teamsResponse = await api.get(`/api/teams/user/${userId}`).catch(() => ({ data: [] }))
       const teams = teamsResponse.data || []
+      setUserTeams(teams)
 
       console.log('User teams:', teams)
       
@@ -259,6 +270,61 @@ export default function Home() {
     }
   }, [user, setUser, logout, loadUserEvents])
 
+  // 사용자가 속한 모든 팀의 알림 구독
+  useEffect(() => {
+    if (!userTeams.length || !user?.id) return
+
+    const client = createStompClient()
+    const subscriptions: StompSubscription[] = []
+
+    const pushNotification = (message: CollaborationNotificationMessage) => {
+      const toast: ToastItem = { id: Date.now(), data: message }
+      setNotifications((prev) => [toast, ...prev].slice(0, 3))
+      console.log('[Home] Received notification:', message.title)
+      window.setTimeout(() => {
+        setNotifications((prev) => prev.filter((item) => item.id !== toast.id))
+      }, 10000)
+    }
+
+    client.onConnect = () => {
+      console.log('[Home] WebSocket connected, subscribing to notifications for teams:', userTeams.map(t => t.id))
+      subscriptions.forEach((sub) => sub.unsubscribe())
+      subscriptions.length = 0
+
+      // 각 팀의 알림 구독
+      userTeams.forEach((team) => {
+        subscriptions.push(
+          client.subscribe(`/topic/notifications/team/${team.id}`, (frame) => {
+            const payload = safeJsonParse<CollaborationNotificationMessage>(frame.body)
+            if (!payload) {
+              console.warn('[Home] Failed to parse notification:', frame.body)
+              return
+            }
+            console.log('[Home] Received team notification:', payload.title, 'for team:', team.id)
+            pushNotification(payload)
+          })
+        )
+      })
+
+      // 사용자 개인 알림 구독
+      subscriptions.push(
+        client.subscribe(`/topic/notifications/user/${user.id}`, (frame) => {
+          const payload = safeJsonParse<CollaborationNotificationMessage>(frame.body)
+          if (!payload) return
+          console.log('[Home] Received user notification:', payload.title)
+          pushNotification(payload)
+        })
+      )
+    }
+
+    client.activate()
+
+    return () => {
+      subscriptions.forEach((sub) => sub.unsubscribe())
+      client.deactivate()
+    }
+  }, [userTeams, user?.id])
+
   const handleDateClick = (_dateClickArg: any) => {
     if (!user) {
       alert('로그인이 필요합니다.')
@@ -270,6 +336,18 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
       <Header />
+      {/* 알림 표시 */}
+      <div className="fixed top-20 right-4 z-50 space-y-2">
+        {notifications.map((toast) => (
+          <div
+            key={toast.id}
+            className="bg-white border border-gray-200 rounded-lg shadow-lg p-4 min-w-[300px] max-w-md animate-in slide-in-from-right"
+          >
+            <div className="font-semibold text-gray-900">{toast.data.title}</div>
+            <div className="text-sm text-gray-600 mt-1">{toast.data.content}</div>
+          </div>
+        ))}
+      </div>
       {/* 메인: 캘린더만 노출 */}
       <main className="mx-auto max-w-7xl px-6 py-6">
         <div className="bg-white rounded-2xl border border-gray-200 shadow-lg overflow-hidden">
