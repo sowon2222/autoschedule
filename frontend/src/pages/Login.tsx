@@ -31,10 +31,7 @@ export default function Login() {
   }
   
   return (
-    <div
-      className="min-h-screen grid place-items-center bg-white px-4 py-12"
-      style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', backgroundColor: '#fff' }}
-    >
+    <div className="min-h-screen grid place-items-center bg-white px-4 py-12">
       <div className="w-full max-w-md">
         {/* 로고 영역 */}
         <div className="text-center mb-10">
