@@ -8,19 +8,18 @@ type Member = { userId: number; userName: string; userEmail: string; role: strin
 export default function Settings(){
   const { id } = useParams()
   const [teamName, setTeamName] = useState('')
-  const [teams, setTeams] = useState<Team[]>([])
+  const [currentTeam, setCurrentTeam] = useState<Team | null>(null)
   const [inviteEmail, setInviteEmail] = useState('')
   const [members, setMembers] = useState<Member[]>([])
+  const [showCreateTeam, setShowCreateTeam] = useState(false)
   const userId = Number(localStorage.getItem('userId') || '0')
 
   const reload = async () => {
     if (id) {
       const m = await api.get(`/api/teams/${id}/members`)
       setMembers(m.data)
-    }
-    if (userId) {
-      const t = await api.get(`/api/teams/user/${userId}`)
-      setTeams(t.data)
+      const t = await api.get(`/api/teams/${id}`)
+      setCurrentTeam(t.data)
     }
   }
 
@@ -30,9 +29,12 @@ export default function Settings(){
     if (!teamName.trim()) return
     const { data } = await api.post('/api/teams', { name: teamName.trim() })
     setTeamName('')
+    setShowCreateTeam(false)
     try { await api.post(`/api/teams/${data.id}/invite`, { userId, role: 'OWNER' }) } catch {}
     await reload()
     alert('팀이 생성되었습니다.')
+    // 새로 생성된 팀의 설정 페이지로 이동
+    window.location.href = `/team/${data.id}/settings`
   }
 
   const invite = async () => {
@@ -53,7 +55,7 @@ export default function Settings(){
         <p className="text-gray-600">팀을 생성하고 멤버를 관리하세요</p>
       </div>
       <div className="grid gap-6">
-        {!id && (
+        {showCreateTeam && (
           <section className="border-2 border-gray-200 rounded-xl p-6 bg-white shadow-lg hover:shadow-xl transition-shadow">
             <h3 className="text-xl font-bold mb-4 text-gray-800 flex items-center gap-2">
               <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -74,6 +76,34 @@ export default function Settings(){
               >
                 생성
               </button>
+              <button 
+                className="bg-gray-200 text-gray-700 px-6 py-2.5 rounded-lg cursor-pointer hover:bg-gray-300 transition-all shadow-md hover:shadow-lg font-medium" 
+                onClick={() => {
+                  setShowCreateTeam(false)
+                  setTeamName('')
+                }}
+              >
+                취소
+              </button>
+            </div>
+          </section>
+        )}
+
+        {id && currentTeam && (
+          <section className="border-2 border-gray-200 rounded-xl p-6 bg-white shadow-lg hover:shadow-xl transition-shadow">
+            <div className="flex items-center justify-between">
+              <span className="text-xl font-bold text-gray-800">
+                {currentTeam.name}
+              </span>
+              <button 
+                className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-2 rounded-lg cursor-pointer hover:from-blue-700 hover:to-purple-700 transition-all shadow-md hover:shadow-lg font-medium text-sm flex items-center gap-2"
+                onClick={() => setShowCreateTeam(true)}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                팀 추가
+              </button>
             </div>
           </section>
         )}
@@ -81,35 +111,9 @@ export default function Settings(){
         <section className="border-2 border-gray-200 rounded-xl p-6 bg-white shadow-lg hover:shadow-xl transition-shadow">
           <h3 className="text-xl font-bold mb-4 text-gray-800 flex items-center gap-2">
             <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-            </svg>
-            내 팀 목록
-          </h3>
-          <ul className="space-y-2">
-            {teams.map(t => (
-              <li key={t.id}>
-                <a 
-                  href={`/team/${t.id}/settings`} 
-                  className="block px-4 py-3 rounded-lg bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 text-blue-700 hover:from-blue-100 hover:to-purple-100 hover:shadow-md transition-all font-medium"
-                >
-                  {t.name}
-                </a>
-              </li>
-            ))}
-            {teams.length === 0 && (
-              <li className="text-gray-500 px-4 py-3 bg-gray-50 rounded-lg border border-gray-200">
-                소속된 팀이 없습니다.
-              </li>
-            )}
-          </ul>
-        </section>
-
-        <section className="border-2 border-gray-200 rounded-xl p-6 bg-white shadow-lg hover:shadow-xl transition-shadow">
-          <h3 className="text-xl font-bold mb-4 text-gray-800 flex items-center gap-2">
-            <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
             </svg>
-            팀 초대
+            팀원 초대
           </h3>
           <div className="flex gap-3 items-center">
             <input 

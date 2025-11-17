@@ -585,17 +585,80 @@ export default function Calendar() {
           .fc-day-today {
             background: #fef3c7 !important;
           }
+          .fc-timegrid-col {
+            width: 14.2857% !important;
+            min-width: 0 !important;
+          }
+          .fc-timegrid-slot {
+            min-height: 2.5em !important;
+          }
+          .fc-timegrid-event {
+            width: 100% !important;
+            max-width: 100% !important;
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+          }
+          .fc-timegrid-event-harness {
+            width: 100% !important;
+            left: 0 !important;
+            right: 0 !important;
+          }
+          .fc-timegrid-event-harness-inset {
+            left: 0 !important;
+            right: 0 !important;
+          }
+          .fc-timegrid-col-events {
+            margin: 0 !important;
+          }
+          .fc-timegrid-event-seg {
+            left: 0 !important;
+            right: 0 !important;
+            width: 100% !important;
+          }
+          .fc-daygrid-day-frame {
+            width: 100% !important;
+          }
+          .fc-daygrid-day-events {
+            width: 100% !important;
+          }
           .fc-event {
             border-radius: 0.375rem !important;
             border: none !important;
-            padding: 2px 4px !important;
+            padding: 4px 6px !important;
             font-weight: 500 !important;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
             transition: all 0.2s !important;
+            min-height: 24px !important;
+            font-size: 0.875rem !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin-left: 0 !important;
+            margin-right: 0 !important;
           }
           .fc-event:hover {
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15) !important;
             transform: translateY(-1px) !important;
+          }
+          .fc-timegrid-event {
+            min-height: 24px !important;
+            padding: 4px 6px !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+          }
+          .fc-daygrid-event {
+            min-height: 24px !important;
+            padding: 4px 6px !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin-left: 0 !important;
+            margin-right: 0 !important;
           }
           .fc-col-header-cell {
             background: #f9fafb !important;
@@ -603,6 +666,18 @@ export default function Calendar() {
             font-weight: 600 !important;
             color: #374151 !important;
             padding: 0.75rem !important;
+          }
+          .fc-event-time {
+            display: inline !important;
+          }
+          .fc-daygrid-block-event .fc-event-time {
+            font-weight: 500 !important;
+          }
+          .fc-daygrid-event-harness {
+            position: relative !important;
+          }
+          .fc-daygrid-event-harness + .fc-daygrid-event-harness {
+            margin-top: 2px !important;
           }
         `}</style>
         <FullCalendar
@@ -627,6 +702,11 @@ export default function Calendar() {
             week: '주',
             day: '일'
           }}
+          displayEventEnd={true}
+          eventDisplay="block"
+          moreLinkClick="popover"
+          eventOverlap={true}
+          slotEventOverlap={true}
         />
       </div>
     </div>

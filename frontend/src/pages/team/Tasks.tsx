@@ -6,15 +6,17 @@ import { createStompClient, safeJsonParse } from '../../lib/ws'
 import type { TaskEventMessage } from '../../lib/ws'
 
 type Task = { id: number; title: string; dueAt?: string; priority: number; durationMin: number }
+type Member = { userId: number; userName: string; userEmail: string; role: string }
 
 export default function Tasks() {
   const { id } = useParams()
   const [list, setList] = useState<Task[]>([])
+  const [members, setMembers] = useState<Member[]>([])
   const [modalOpen, setModalOpen] = useState(false)
   const [newTaskIds, setNewTaskIds] = useState<Set<number>>(new Set())
   const [formData, setFormData] = useState({
     title: '',
-    durationMin: 60,
+    startAt: '',
     dueAt: '',
     priority: 3,
     assigneeId: undefined as number | undefined,
@@ -28,8 +30,15 @@ export default function Tasks() {
     }
   }
 
+  const loadMembers = () => {
+    if (id) {
+      api.get(`/api/teams/${id}/members`).then(r => setMembers(r.data)).catch(console.error)
+    }
+  }
+
   useEffect(() => {
     loadTasks()
+    loadMembers()
   }, [id])
 
   useEffect(() => {
@@ -136,10 +145,26 @@ export default function Tasks() {
     if (!id) return
 
     try {
+      // 시작 시간과 마감 시간을 기반으로 durationMin 계산
+      let durationMin = 60 // 기본값
+      if (formData.startAt && formData.dueAt) {
+        const start = new Date(formData.startAt)
+        const end = new Date(formData.dueAt)
+        if (end > start) {
+          durationMin = Math.round((end.getTime() - start.getTime()) / (1000 * 60))
+        } else {
+          alert('마감 시간은 시작 시간보다 늦어야 합니다.')
+          return
+        }
+      } else if (formData.dueAt) {
+        // 마감 시간만 있는 경우, 기본 소요 시간 사용
+        durationMin = 60
+      }
+
       const payload = {
         teamId: Number(id),
         title: formData.title,
-        durationMin: formData.durationMin,
+        durationMin: durationMin,
         dueAt: formData.dueAt ? new Date(formData.dueAt).toISOString() : null,
         priority: formData.priority,
         assigneeId: formData.assigneeId || null,
@@ -151,7 +176,7 @@ export default function Tasks() {
       setModalOpen(false)
       setFormData({
         title: '',
-        durationMin: 60,
+        startAt: '',
         dueAt: '',
         priority: 3,
         assigneeId: undefined,
@@ -260,16 +285,27 @@ export default function Tasks() {
               />
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium mb-1">소요시간(분) *</label>
+                  <label className="block text-sm font-medium mb-1">시작 날짜/시간 *</label>
                   <input
-                    type="number"
+                    type="datetime-local"
                     className="border rounded-lg px-3 py-2 w-full"
-                    min="1"
-                    value={formData.durationMin}
-                    onChange={(e) => setFormData({ ...formData, durationMin: Number(e.target.value) })}
+                    value={formData.startAt}
+                    onChange={(e) => setFormData({ ...formData, startAt: e.target.value })}
                     required
                   />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">마감 날짜/시간 *</label>
+                  <input
+                    type="datetime-local"
+                    className="border rounded-lg px-3 py-2 w-full"
+                    value={formData.dueAt}
+                    onChange={(e) => setFormData({ ...formData, dueAt: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium mb-1">우선순위 (1-5)</label>
                   <input
@@ -281,24 +317,21 @@ export default function Tasks() {
                     onChange={(e) => setFormData({ ...formData, priority: Number(e.target.value) })}
                   />
                 </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">마감일시</label>
-                <input
-                  type="datetime-local"
-                  className="border rounded-lg px-3 py-2 w-full"
-                  value={formData.dueAt}
-                  onChange={(e) => setFormData({ ...formData, dueAt: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">담당자 ID (선택)</label>
-                <input
-                  type="number"
-                  className="border rounded-lg px-3 py-2 w-full"
-                  value={formData.assigneeId || ''}
-                  onChange={(e) => setFormData({ ...formData, assigneeId: e.target.value ? Number(e.target.value) : undefined })}
-                />
+                <div>
+                  <label className="block text-sm font-medium mb-1">담당자 (선택)</label>
+                  <select
+                    className="border rounded-lg px-3 py-2 w-full"
+                    value={formData.assigneeId || ''}
+                    onChange={(e) => setFormData({ ...formData, assigneeId: e.target.value ? Number(e.target.value) : undefined })}
+                  >
+                    <option value="">담당자 선택</option>
+                    {members.map((member) => (
+                      <option key={member.userId} value={member.userId}>
+                        {member.userName} ({member.userEmail})
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">태그 (선택)</label>

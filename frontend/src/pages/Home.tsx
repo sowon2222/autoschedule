@@ -8,7 +8,7 @@ import api from '../lib/api'
 import { useAuth } from '../store/auth'
 import type { StompSubscription } from '@stomp/stompjs'
 import { createStompClient, safeJsonParse } from '../lib/ws'
-import type { CollaborationNotificationMessage } from '../lib/ws'
+import type { CollaborationNotificationMessage, TaskEventMessage } from '../lib/ws'
 
 type CalendarEventItem = {
   id: string
@@ -23,6 +23,7 @@ type CalendarEventItem = {
   extendedProps?: {
     type?: 'task' | 'event'
     priority?: number
+    teamId?: number
   }
 }
 
@@ -270,12 +271,18 @@ export default function Home() {
     }
   }, [user, setUser, logout, loadUserEvents])
 
-  // 사용자가 속한 모든 팀의 알림 구독
+  // 사용자가 속한 모든 팀의 알림 및 작업 이벤트 구독
   useEffect(() => {
     if (!userTeams.length || !user?.id) return
 
     const client = createStompClient()
     const subscriptions: StompSubscription[] = []
+
+    // 팀 ID -> 색상 매핑 생성
+    const teamColorMap = new Map<number, string>()
+    userTeams.forEach((team: any) => {
+      teamColorMap.set(team.id, getTeamColor(team.id))
+    })
 
     const pushNotification = (message: CollaborationNotificationMessage) => {
       const toast: ToastItem = { id: Date.now(), data: message }
@@ -286,8 +293,68 @@ export default function Home() {
       }, 10000)
     }
 
+    const upsertTaskEvent = (message: TaskEventMessage) => {
+      const taskId = message.task?.id ?? message.taskId
+      if (!taskId) {
+        console.warn('[Home] Task event missing taskId:', message)
+        return
+      }
+      const calendarId = `task-${taskId}`
+
+      // 삭제된 작업이거나 작업 정보가 없으면 캘린더에서 제거
+      if (message.action === 'DELETED' || !message.task) {
+        console.log('[Home] Removing task from calendar:', taskId, message.action)
+        setEvents((prev) => prev.filter((entry) => entry.id !== calendarId))
+        return
+      }
+
+      // 마감일시가 없으면 캘린더에 표시하지 않음
+      if (!message.task.dueAt) {
+        console.log('[Home] Task has no dueAt, skipping calendar display:', taskId)
+        setEvents((prev) => prev.filter((entry) => entry.id !== calendarId))
+        return
+      }
+
+      const dueDate = new Date(message.task.dueAt)
+      if (isNaN(dueDate.getTime())) {
+        console.warn('[Home] Invalid dueAt date:', message.task.dueAt)
+        setEvents((prev) => prev.filter((entry) => entry.id !== calendarId))
+        return
+      }
+
+      const endDate = new Date(dueDate.getTime() + (message.task.durationMin ?? 0) * 60 * 1000)
+      const priority = message.task.priority ?? 3
+      const teamId = message.task.teamId
+      const teamBaseColor = teamId ? (teamColorMap.get(teamId) || teamColors[0].base) : teamColors[0].base
+      const colors = getColorByPriority(teamBaseColor, priority)
+
+      const converted: CalendarEventItem = {
+        id: calendarId,
+        title: `📋 ${message.task.title}`,
+        start: dueDate.toISOString(),
+        end: endDate.toISOString(),
+        backgroundColor: colors.bg,
+        borderColor: colors.border,
+        extendedProps: {
+          type: 'task',
+          priority,
+          teamId: teamId ?? undefined
+        }
+      }
+
+      setEvents((prev) => {
+        const index = prev.findIndex((entry) => entry.id === converted.id)
+        if (index >= 0) {
+          const copy = [...prev]
+          copy[index] = converted
+          return copy
+        }
+        return [...prev, converted]
+      })
+    }
+
     client.onConnect = () => {
-      console.log('[Home] WebSocket connected, subscribing to notifications for teams:', userTeams.map(t => t.id))
+      console.log('[Home] WebSocket connected, subscribing to notifications and tasks for teams:', userTeams.map(t => t.id))
       subscriptions.forEach((sub) => sub.unsubscribe())
       subscriptions.length = 0
 
@@ -302,6 +369,21 @@ export default function Home() {
             }
             console.log('[Home] Received team notification:', payload.title, 'for team:', team.id)
             pushNotification(payload)
+          })
+        )
+      })
+
+      // 각 팀의 작업 이벤트 구독 (캘린더 실시간 업데이트)
+      userTeams.forEach((team) => {
+        subscriptions.push(
+          client.subscribe(`/topic/tasks/${team.id}`, (frame) => {
+            const payload = safeJsonParse<TaskEventMessage>(frame.body)
+            if (!payload) {
+              console.warn('[Home] Failed to parse task event:', frame.body)
+              return
+            }
+            console.log('[Home] Received task event:', payload.action, 'for team:', team.id)
+            upsertTaskEvent(payload)
           })
         )
       })
