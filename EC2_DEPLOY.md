@@ -106,8 +106,8 @@ Environment="SPRING_PROFILES_ACTIVE=prod"
 Environment="SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/autoschedule"
 Environment="SPRING_DATASOURCE_USERNAME=autosched"
 Environment="SPRING_DATASOURCE_PASSWORD=$DB_PASSWORD"
-Environment="APP_WEBSOCKET_ALLOWED_ORIGINS=http://$EC2_IP,https://$EC2_IP"
-Environment="APP_CORS_ALLOWED_ORIGINS=http://$EC2_IP,https://$EC2_IP"
+Environment="APP_WEBSOCKET_ALLOWED_ORIGINS=http://$EC2_IP:8080,https://$EC2_IP:8080,http://$EC2_IP,https://$EC2_IP"
+Environment="APP_CORS_ALLOWED_ORIGINS=http://$EC2_IP:8080,https://$EC2_IP:8080,http://$EC2_IP,https://$EC2_IP"
 # JVM 성능 최적화 옵션
 ExecStart=/usr/bin/java -Xms512m -Xmx1024m -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -Djava.security.egd=file:/dev/./urandom -jar /home/ubuntu/app.jar
 Restart=always
