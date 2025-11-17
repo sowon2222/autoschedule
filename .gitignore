@@ -39,3 +39,7 @@ BLOG_*.md
 *_TROUBLESHOOTING.md
 IDE_FIX_*.md
 *_GUIDE.md
+
+# Frontend build artifacts
+src/main/resources/static/assets/
+src/main/resources/static/vite.svg
