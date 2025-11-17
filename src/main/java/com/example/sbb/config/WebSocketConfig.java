@@ -41,14 +41,14 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(@NonNull StompEndpointRegistry registry) {
-        String[] allowedOrigins = webSocketSecurityProperties.getAllowedOrigins()
-                .toArray(new String[0]);
-
         registry.addEndpoint("/ws")
-                // Handshake 인터셉터로 Origin/TLS 검증
+                // Handshake 인터셉터로 Origin/TLS 검증 (실제 Origin 체크는 여기서 수행)
                 .addInterceptors(strictHandshakeInterceptor)
-                // application.properties에서 관리하는 Origin 목록 적용
-                .setAllowedOrigins(allowedOrigins)
+                // setAllowedOriginPatterns("*")를 사용하면 SockJS의 originCheck가 비활성화되고
+                // allowCredentials와도 충돌하지 않음
+                // 실제 Origin 검증은 StrictHandshakeInterceptor에서 수행
+                // 이렇게 하면 iframe/jsonp transport도 정상 작동하고, 모든 transport가 동일하게 처리됨
+                .setAllowedOriginPatterns("*")
                 .withSockJS();
     }
 

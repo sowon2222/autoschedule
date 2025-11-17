@@ -3,9 +3,12 @@ package com.example.sbb.config;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 /**
  * WebSocket 보안 관련 설정값을 외부에서 주입받기 위한 Properties 클래스.
@@ -17,7 +20,11 @@ public class WebSocketSecurityProperties {
 
     /**
      * WebSocket/STOMP handshake를 허용할 Origin 목록.
+     * 환경 변수 APP_WEBSOCKET_ALLOWED_ORIGINS가 설정되어 있으면 우선 사용.
      */
+    @Value("${APP_WEBSOCKET_ALLOWED_ORIGINS:${app.websocket.allowed-origins:}}")
+    private String allowedOriginsEnv;
+
     private List<String> allowedOrigins = new ArrayList<>(Arrays.asList(
             "http://localhost:5173",
             "http://localhost:3000",
@@ -36,7 +43,32 @@ public class WebSocketSecurityProperties {
 
     private final RateLimitProperties rateLimit = new RateLimitProperties();
 
+    /**
+     * 환경 변수에서 설정된 Origin 목록을 우선 사용하고,
+     * 없으면 application.properties의 값을 사용합니다.
+     */
     public List<String> getAllowedOrigins() {
+        // 1순위: 시스템 환경 변수 직접 읽기
+        String envValue = System.getenv("APP_WEBSOCKET_ALLOWED_ORIGINS");
+        if (StringUtils.hasText(envValue)) {
+            System.out.println("[WebSocket] Using environment variable APP_WEBSOCKET_ALLOWED_ORIGINS: " + envValue);
+            return Arrays.stream(envValue.split(","))
+                    .map(String::trim)
+                    .filter(StringUtils::hasText)
+                    .collect(Collectors.toList());
+        }
+        
+        // 2순위: @Value로 주입된 값
+        if (StringUtils.hasText(allowedOriginsEnv)) {
+            System.out.println("[WebSocket] Using @Value injected allowedOriginsEnv: " + allowedOriginsEnv);
+            return Arrays.stream(allowedOriginsEnv.split(","))
+                    .map(String::trim)
+                    .filter(StringUtils::hasText)
+                    .collect(Collectors.toList());
+        }
+        
+        // 3순위: application.properties 기본값
+        System.out.println("[WebSocket] Using default allowedOrigins from application.properties: " + allowedOrigins);
         return allowedOrigins;
     }
 

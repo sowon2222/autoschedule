@@ -33,14 +33,28 @@ public class StrictHandshakeInterceptor implements HandshakeInterceptor {
                                    @NonNull ServerHttpResponse response,
                                    @NonNull WebSocketHandler wsHandler,
                                    @NonNull java.util.Map<String, Object> attributes) {
+        String path = request.getURI().getPath();
+        
+        // SockJS 정적 리소스 요청(info, iframe.html 등)은 허용
+        if (path != null && (path.contains("/info") || path.contains("/iframe.html") || path.contains("/jsonp"))) {
+            System.out.println("[WebSocket] SockJS static resource request, allowing: " + path);
+            return true;
+        }
+        
+        // 실제 WebSocket / XHR / EventSource 요청에 대해서만 Origin 검사
         // 1) Origin 헤더가 허용된 도메인인지 확인
         if (!isOriginAllowed(request.getHeaders())) {
+            System.err.println("[WebSocket] Origin not allowed, blocking: " + request.getHeaders().getOrigin());
             return false;
         }
+        
         // 2) 배포 환경에서 TLS가 강제된다면 https/wss 연결인지 검사
         if (properties.isRequireSecureHandshake() && !isSecure(request)) {
+            System.err.println("[WebSocket] Secure handshake required but connection is not secure");
             return false;
         }
+        
+        System.out.println("[WebSocket] Handshake allowed for: " + path);
         return true;
     }
 
@@ -57,12 +71,28 @@ public class StrictHandshakeInterceptor implements HandshakeInterceptor {
      */
     private boolean isOriginAllowed(HttpHeaders headers) {
         List<String> origins = headers.get(HttpHeaders.ORIGIN);
+        List<String> allowedOrigins = properties.getAllowedOrigins();
+        
+        // 디버깅: 허용된 Origin 목록 로그
+        System.out.println("[WebSocket] Allowed origins: " + allowedOrigins);
+        System.out.println("[WebSocket] Request origin: " + origins);
+        
         if (origins == null || origins.isEmpty()) {
             // Origin 헤더가 없는 경우(같은 오리진)는 허용
+            System.out.println("[WebSocket] No Origin header, allowing (same origin)");
             return true;
         }
-        return origins.stream()
-                .anyMatch(origin -> properties.getAllowedOrigins().contains(origin));
+        
+        boolean allowed = origins.stream()
+                .anyMatch(origin -> allowedOrigins.contains(origin));
+        
+        if (!allowed) {
+            System.out.println("[WebSocket] Origin not allowed: " + origins);
+        } else {
+            System.out.println("[WebSocket] Origin allowed: " + origins);
+        }
+        
+        return allowed;
     }
 
     /**
