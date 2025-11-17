@@ -1,65 +1,17 @@
 <!doctype html>
-<html lang="ko">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>홈</title>
-    <style>
-        body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 0; background: #f6f7f9; color: #111; }
-        .container { max-width: 720px; margin: 0 auto; padding: 48px 20px; }
-        .card { background: #201c1c; border: 1px solid #e5e7eb; border-radius: 12px; padding: 32px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
-        h1 { margin: 0 0 12px; font-size: 28px; }
-        p { margin: 0 0 24px; color: #555; }
-        .actions { display: flex; gap: 12px; flex-wrap: wrap; }
-        .btn { appearance: none; border: 0; padding: 12px 18px; border-radius: 10px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-block; }
-        .btn-primary { background: #2563eb; color: #fff; }
-        .btn-outline { background: #fff; color: #2563eb; border: 1px solid #2563eb; }
-        .btn:focus { outline: 3px solid rgba(37,99,235,0.35); outline-offset: 2px; }
-    </style>
-    <link rel="icon" href="data:,">
-    <script src="/js/app.js"></script>
-    </head>
-<body>
-<div class="container">
-    <div class="card" id="guest">
-        <h1>안녕하세요.</h1>
-        <p>아래 버튼을 눌러 로그인하거나 회원가입을 진행하세요.</p>
-        <div class="actions">
-            <a class="btn btn-primary" href="/login.html">로그인</a>
-            <a class="btn btn-outline" href="/signup.html">회원가입</a>
-            <a class="btn btn-outline" href="/team.html">팀 관리</a>
-            <a class="btn btn-outline" href="/task.html">작업 관리</a>
-            <a class="btn btn-outline" href="/event.html">이벤트 관리</a>
-        </div>
-    </div>
-
-    <div class="card" id="authed" style="display:none">
-        <h1>환영합니다, <span id="user-name"></span>님</h1>
-        <p>아래에서 보호된 API를 호출해 사용자 목록을 볼 수 있습니다.</p>
-        <div class="actions">
-            <a class="btn btn-primary" href="/users.html">사용자 목록 보기</a>
-            <a class="btn btn-outline" href="/team.html">팀 관리</a>
-            <a class="btn btn-outline" href="/task.html">작업 관리</a>
-            <a class="btn btn-outline" href="/event.html">이벤트 관리</a>
-            <button class="btn btn-outline" id="logout-btn" type="button">로그아웃</button>
-        </div>
-    </div>
-  </div>
-</div>
-<script>
-  (function(){
-    const isIn = window.App && window.App.isLoggedIn();
-    const guest = document.getElementById('guest');
-    const authed = document.getElementById('authed');
-    if (isIn) {
-      guest.style.display = 'none';
-      authed.style.display = 'block';
-      document.getElementById('user-name').textContent = localStorage.getItem('userName') || '사용자';
-      document.getElementById('logout-btn').addEventListener('click', () => window.App.logout());
-    }
-  })();
-  </script>
-</body>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AutoSchedule · 협업을 더 빠르게</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <script type="module" crossorigin src="/assets/index-CcRP8hXE.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-DaVXw9N0.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
 </html>
-
-

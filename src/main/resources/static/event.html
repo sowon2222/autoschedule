@@ -4,71 +4,198 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>이벤트 관리</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="icon" href="data:,">
   <script src="/js/app.js"></script>
   <style>
-    body { font-family: system-ui; margin:0; background:#f6f7f9; }
-    .container { max-width: 900px; margin: 0 auto; padding: 48px 20px; }
-    .card { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:24px; }
-    .row { display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
-    input { padding:10px 12px; border:1px solid #d1d5db; border-radius:10px; }
-    .btn { appearance:none; border:0; padding:10px 16px; border-radius:10px; font-weight:700; cursor:pointer; background:#2563eb; color:#fff; }
-    table { width:100%; border-collapse:collapse; }
-    th, td { text-align:left; padding:8px; border-bottom:1px solid #eee; }
+    body {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 2rem 0;
+    }
+    .main-card {
+      border-radius: 20px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+      border: none;
+    }
+    .section-title {
+      color: #2d3748;
+      font-weight: 700;
+      margin-bottom: 1.5rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 2px solid #e5e7eb;
+    }
   </style>
 </head>
 <body>
 <div class="container">
-  <div class="card">
-    <h2>이벤트 생성</h2>
-    <div class="row">
-      <input id="teamId" placeholder="팀 ID" type="number">
-      <input id="title" placeholder="제목">
-      <input id="location" placeholder="장소">
-      <input id="startAt" placeholder="시작 (ISO)">
-      <input id="endAt" placeholder="종료 (ISO)">
-      <button class="btn" id="create">생성</button>
-      <a class="btn" style="background:#6b7280; text-decoration:none;" href="/">홈</a>
+  <div class="card main-card">
+    <div class="card-body p-4">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">
+          <i class="bi bi-calendar-event text-primary me-2"></i>이벤트 관리
+        </h2>
+        <a class="btn btn-secondary" href="/">
+          <i class="bi bi-house me-1"></i>홈
+        </a>
+      </div>
+
+      <div class="mb-5">
+        <h3 class="section-title">
+          <i class="bi bi-plus-circle me-2"></i>이벤트 생성
+        </h3>
+        <div class="row g-3">
+          <div class="col-md-6 col-lg-3">
+            <label class="form-label fw-semibold">팀 ID</label>
+            <input id="teamId" class="form-control" placeholder="팀 ID" type="number">
+          </div>
+          <div class="col-md-6 col-lg-3">
+            <label class="form-label fw-semibold">제목</label>
+            <input id="title" class="form-control" placeholder="이벤트 제목">
+          </div>
+          <div class="col-md-6 col-lg-3">
+            <label class="form-label fw-semibold">장소</label>
+            <input id="location" class="form-control" placeholder="장소">
+          </div>
+          <div class="col-md-6 col-lg-3">
+            <label class="form-label fw-semibold">시작일시</label>
+            <input id="startAt" class="form-control" type="datetime-local">
+          </div>
+          <div class="col-md-6 col-lg-3">
+            <label class="form-label fw-semibold">종료일시</label>
+            <input id="endAt" class="form-control" type="datetime-local">
+          </div>
+          <div class="col-md-6 col-lg-3 d-flex align-items-end">
+            <button class="btn btn-primary w-100" id="create">
+              <i class="bi bi-plus-circle me-2"></i>생성
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h3 class="section-title">
+          <i class="bi bi-list-ul me-2"></i>팀별 이벤트
+        </h3>
+        <div class="row g-3 mb-3">
+          <div class="col-md-4">
+            <input id="qTeam" class="form-control" placeholder="팀 ID 입력" type="number">
+          </div>
+          <div class="col-md-2">
+            <button class="btn btn-primary w-100" id="load">
+              <i class="bi bi-search me-2"></i>불러오기
+            </button>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>ID</th>
+                <th>제목</th>
+                <th>장소</th>
+                <th>시작</th>
+                <th>종료</th>
+              </tr>
+            </thead>
+            <tbody id="rows">
+              <tr>
+                <td colspan="5" class="text-center text-muted py-4">팀 ID를 입력하고 불러오기를 클릭하세요</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
-    <h2>팀별 이벤트</h2>
-    <div class="row">
-      <input id="qTeam" placeholder="팀 ID" type="number">
-      <button class="btn" id="load">불러오기</button>
-    </div>
-    <table>
-      <thead><tr><th>ID</th><th>제목</th><th>장소</th><th>시작</th><th>종료</th></tr></thead>
-      <tbody id="rows"></tbody>
-    </table>
   </div>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
   async function load(teamId){
     const res = await App.apiFetch(`/api/events/team/${teamId}`);
     const rows = document.getElementById('rows');
     rows.innerHTML = '';
-    if (!res.ok) return alert('조회 실패: '+(await res.text()));
+    if (!res.ok) {
+      rows.innerHTML = `<tr><td colspan="5" class="text-center text-danger py-4">조회 실패: ${await res.text()}</td></tr>`;
+      return;
+    }
     const list = await res.json();
+    if (list.length === 0) {
+      rows.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-4">이벤트가 없습니다</td></tr>`;
+      return;
+    }
     for (const e of list){
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${e.id}</td><td>${e.title}</td><td>${e.location ?? ''}</td><td>${e.startAt ?? ''}</td><td>${e.endAt ?? ''}</td>`;
+      const startDate = e.startAt ? new Date(e.startAt).toLocaleString('ko-KR') : '-';
+      const endDate = e.endAt ? new Date(e.endAt).toLocaleString('ko-KR') : '-';
+      tr.innerHTML = `
+        <td><span class="badge bg-info">${e.id}</span></td>
+        <td><strong>${e.title}</strong></td>
+        <td>${e.location ?? '<span class="text-muted">미지정</span>'}</td>
+        <td>${startDate}</td>
+        <td>${endDate}</td>
+      `;
       rows.appendChild(tr);
     }
   }
   document.getElementById('load').addEventListener('click', () => {
     const teamId = Number(document.getElementById('qTeam').value);
-    if (!teamId) return alert('팀 ID 입력');
+    if (!teamId) {
+      alert('팀 ID를 입력하세요');
+      return;
+    }
     load(teamId);
   });
   document.getElementById('create').addEventListener('click', async () => {
+    const teamId = Number(document.getElementById('teamId').value);
+    const title = document.getElementById('title').value.trim();
+    const location = document.getElementById('location').value.trim() || null;
+    const startAtInput = document.getElementById('startAt').value;
+    const endAtInput = document.getElementById('endAt').value;
+    // datetime-local을 ISO 형식으로 변환
+    const startAt = startAtInput ? new Date(startAtInput).toISOString() : null;
+    const endAt = endAtInput ? new Date(endAtInput).toISOString() : null;
+    
+    if (!teamId || !title || !startAt || !endAt) {
+      alert('팀 ID, 제목, 시작일시, 종료일시를 모두 입력하세요');
+      return;
+    }
+
     const body = {
-      teamId: Number(document.getElementById('teamId').value),
-      title: document.getElementById('title').value,
-      location: document.getElementById('location').value || null,
-      startAt: document.getElementById('startAt').value,
-      endAt: document.getElementById('endAt').value
+      teamId: teamId,
+      title: title,
+      location: location,
+      startAt: startAt,
+      endAt: endAt
     };
-    const res = await App.apiFetch('/api/events', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
-    if (!res.ok) return alert('생성 실패: '+(await res.text()));
+    
+    const createBtn = document.getElementById('create');
+    const originalText = createBtn.innerHTML;
+    createBtn.disabled = true;
+    createBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>생성 중...';
+    
+    const res = await App.apiFetch('/api/events', { 
+      method:'POST', 
+      headers:{'Content-Type':'application/json'}, 
+      body: JSON.stringify(body)
+    });
+    
+    createBtn.disabled = false;
+    createBtn.innerHTML = originalText;
+    
+    if (!res.ok) {
+      alert('생성 실패: '+(await res.text()));
+      return;
+    }
+    
+    // 폼 초기화
+    document.getElementById('teamId').value = '';
+    document.getElementById('title').value = '';
+    document.getElementById('location').value = '';
+    document.getElementById('startAt').value = '';
+    document.getElementById('endAt').value = '';
+    
     if (body.teamId) load(body.teamId);
   });
 </script>
