@@ -42,6 +42,10 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)  // REST API이므로 CSRF 비활성화
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))  // CORS 설정
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))  // JWT 사용하므로 세션 사용 안 함
+            // SockJS iframe 폴백을 위해 X-Frame-Options를 SAMEORIGIN으로 설정
+            .headers(headers -> headers
+                .frameOptions(frameOptions -> frameOptions.sameOrigin())
+            )
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**").permitAll()  // 인증 API는 모두 허용
                 .requestMatchers("/api/**").authenticated()  // 나머지 API는 인증 필요
@@ -50,7 +54,8 @@ public class SecurityConfig {
                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll() // Swagger UI 및 OpenAPI 문서 허용
                 .requestMatchers("/", "/index.html", "/login.html", "/signup.html",
                                  "/users.html", "/task.html", "/team.html", "/event.html", "/ws-test.html").permitAll() // 루트 및 HTML 페이지 허용
-                .requestMatchers("/ws/**").permitAll() // 웹소켓 핸드셰이크 허용
+                // SockJS 관련 경로 모두 허용 (iframe.html, jsonp, info 등)
+                .requestMatchers("/ws/**").permitAll() // 웹소켓 핸드셰이크 및 SockJS 정적 리소스 허용
                 .requestMatchers("/actuator/**").permitAll()  // Actuator (선택사항)
                 .requestMatchers("/hello").permitAll()  // 테스트 엔드포인트 허용
                 .requestMatchers("/assets/**").permitAll()  // React 빌드된 assets 허용

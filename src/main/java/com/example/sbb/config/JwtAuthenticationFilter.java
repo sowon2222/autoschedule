@@ -29,9 +29,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             @NonNull HttpServletResponse response,
             @NonNull FilterChain filterChain) throws ServletException, IOException {
 
-        // 인증 API는 필터 통과
+        // 인증 API와 WebSocket은 필터 통과
         String path = request.getRequestURI();
-        if (path.startsWith("/api/auth")) {
+        if (path.startsWith("/api/auth") || path.startsWith("/ws")) {
             filterChain.doFilter(request, response);
             return;
         }

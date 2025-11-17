@@ -48,23 +48,42 @@ public class StompJwtChannelInterceptor implements ChannelInterceptor {
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
+        // 모든 메시지에 대해 로그 출력 (디버깅용)
+        System.out.println("[STOMP Interceptor] preSend called, message type: " + message.getClass().getSimpleName());
+        
         StompHeaderAccessor accessor = StompHeaderAccessor.wrap(message);
         StompCommand command = accessor.getCommand();
+        
+        System.out.println("[STOMP Interceptor] Command: " + command + ", session: " + accessor.getSessionId());
+        
         if (command == null) {
             // STOMP 프레임이 아니면 그대로 통과
+            System.out.println("[STOMP Interceptor] Not a STOMP frame, passing through");
             return message;
         }
 
-        switch (command) {
-            case CONNECT -> handleConnect(accessor);               // 최초 연결 시 토큰 검증
-            case SEND -> ensureAuthenticated(accessor);            // 프레임 전송 시 인증 여부 확인
-            case SUBSCRIBE -> {
-                ensureAuthenticated(accessor);                      // 인증 확인
-                validateTopicAccess(accessor);                      // 토픽 접근 권한 검증
+        System.out.println("[STOMP] Received command: " + command + ", session: " + accessor.getSessionId());
+
+        try {
+            switch (command) {
+                case CONNECT -> {
+                    System.out.println("[STOMP] Handling CONNECT, session: " + accessor.getSessionId());
+                    handleConnect(accessor);               // 최초 연결 시 토큰 검증
+                    System.out.println("[STOMP] CONNECT successful, session: " + accessor.getSessionId());
+                }
+                case SEND -> ensureAuthenticated(accessor);            // 프레임 전송 시 인증 여부 확인
+                case SUBSCRIBE -> {
+                    ensureAuthenticated(accessor);                      // 인증 확인
+                    validateTopicAccess(accessor);                      // 토픽 접근 권한 검증
+                }
+                case DISCONNECT -> cleanupSession(accessor);           // 세션 정리
+                default -> {
+                }
             }
-            case DISCONNECT -> cleanupSession(accessor);           // 세션 정리
-            default -> {
-            }
+        } catch (Exception e) {
+            System.err.println("[STOMP] Error handling " + command + ": " + e.getMessage());
+            e.printStackTrace();
+            throw e;
         }
 
         return message;
@@ -72,17 +91,26 @@ public class StompJwtChannelInterceptor implements ChannelInterceptor {
 
     private void handleConnect(StompHeaderAccessor accessor) {
         String sessionId = accessor.getSessionId();
+        System.out.println("[STOMP] handleConnect called, session: " + sessionId);
+        
         String rawToken = resolveToken(accessor);
+        System.out.println("[STOMP] Raw token resolved: " + (rawToken != null ? "present" : "null"));
 
         if (!StringUtils.hasText(rawToken)) {
             // CONNECT 단계에서 토큰이 없으면 연결 자체를 거부
+            System.err.println("[STOMP] Missing Authorization header for STOMP CONNECT, session: " + sessionId);
             throw new MessageDeliveryException("Missing Authorization header for STOMP CONNECT");
         }
 
         String token = normalizeBearerToken(rawToken);
+        System.out.println("[STOMP] Token normalized, validating...");
+        
         if (!jwtUtil.isTokenValid(token)) {
+            System.err.println("[STOMP] Invalid JWT token in STOMP CONNECT, session: " + sessionId);
             throw new MessageDeliveryException("Invalid JWT token in STOMP CONNECT");
         }
+        
+        System.out.println("[STOMP] Token is valid");
 
         Long userId = jwtUtil.getUserIdFromToken(token);
         Principal principal = new UsernamePasswordAuthenticationToken(
