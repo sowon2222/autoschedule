@@ -1,6 +1,10 @@
 import axios, { AxiosHeaders } from 'axios'
 
-const api = axios.create({ baseURL: 'http://localhost:8080' })
+// VITE_API_BASE_URL이 설정되지 않았을 때만 기본값 사용 (빈 문자열은 상대 경로로 사용)
+const envUrl = import.meta.env.VITE_API_BASE_URL
+const API_BASE_URL = envUrl !== undefined ? envUrl : 'http://localhost:8080'
+
+const api = axios.create({ baseURL: API_BASE_URL || undefined })
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('accessToken')
@@ -34,7 +38,7 @@ api.interceptors.response.use(
       const { data } = await axios.post(
         '/api/auth/refresh',
         null,
-        { baseURL: 'http://localhost:8080', headers: { Authorization: `Bearer ${refreshToken}` } }
+        { baseURL: API_BASE_URL || undefined, headers: { Authorization: `Bearer ${refreshToken}` } }
       )
       localStorage.setItem('accessToken', data.accessToken)
       localStorage.setItem('refreshToken', data.refreshToken)
