@@ -21,7 +21,10 @@ export default function Tasks() {
     priority: 3,
     assigneeId: undefined as number | undefined,
     splittable: true,
-    tags: ''
+    tags: '',
+    recurrenceEnabled: false,
+    recurrenceType: 'WEEKLY' as 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY',
+    recurrenceEndDate: ''
   })
 
   const loadTasks = () => {
@@ -161,7 +164,7 @@ export default function Tasks() {
         durationMin = 60
       }
 
-      const payload = {
+      const payload: any = {
         teamId: Number(id),
         title: formData.title,
         durationMin: durationMin,
@@ -170,6 +173,13 @@ export default function Tasks() {
         assigneeId: formData.assigneeId || null,
         splittable: formData.splittable,
         tags: formData.tags || null
+      }
+      
+      if (formData.recurrenceEnabled) {
+        payload.recurrenceType = formData.recurrenceType
+        payload.recurrenceEndDate = formData.recurrenceEndDate 
+          ? new Date(formData.recurrenceEndDate).toISOString() 
+          : null
       }
       const response = await api.post('/api/tasks', payload)
       console.log('[Tasks] Task created:', response.data)
@@ -181,7 +191,10 @@ export default function Tasks() {
         priority: 3,
         assigneeId: undefined,
         splittable: true,
-        tags: ''
+        tags: '',
+        recurrenceEnabled: false,
+        recurrenceType: 'WEEKLY',
+        recurrenceEndDate: ''
       })
       // WebSocket으로 다른 팀원들에게는 자동으로 전송되지만,
       // 작업 생성자에게도 즉시 반영되도록 목록 새로고침
@@ -201,17 +214,16 @@ export default function Tasks() {
 
   return (
     <div className="p-6">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-2xl font-bold">작업 목록</h2>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-sm">
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2 text-sm text-gray-600">
             <div className={`w-2 h-2 rounded-full ${
               wsStatus === 'connected' ? 'bg-green-500' : 
               wsStatus === 'connecting' ? 'bg-yellow-500 animate-pulse' : 
               'bg-red-500'
             }`} />
-            <span className="text-gray-600">
-              {wsStatus === 'connected' ? 'WebSocket 연결됨' : 
+            <span>
+              {wsStatus === 'connected' ? '연결됨' : 
                wsStatus === 'connecting' ? '연결 중...' : 
                '연결 안됨'}
             </span>
@@ -221,96 +233,123 @@ export default function Tasks() {
           </div>
           <button
             onClick={() => setModalOpen(true)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all shadow-md hover:shadow-lg font-medium"
           >
             작업 추가
           </button>
         </div>
       </div>
 
-      <table className="w-full border">
-        <thead>
-          <tr>
-            <th className="p-2 border">제목</th>
-            <th className="p-2 border">소요시간(분)</th>
-            <th className="p-2 border">마감</th>
-            <th className="p-2 border">우선순위</th>
-          </tr>
-        </thead>
-        <tbody>
-          {list.map(t => (
-            <tr 
-              key={t.id}
-              className={newTaskIds.has(t.id) ? 'bg-green-50 animate-pulse' : ''}
-              style={{
-                transition: 'background-color 0.3s ease-out'
-              }}
-            >
-              <td className="p-2 border">
-                {newTaskIds.has(t.id) && (
-                  <span className="inline-block mr-2 px-2 py-0.5 text-xs bg-green-500 text-white rounded">
-                    새 작업
-                  </span>
-                )}
-                {t.title}
-              </td>
-              <td className="p-2 border">{t.durationMin}</td>
-              <td className="p-2 border">{t.dueAt ? new Date(t.dueAt).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' }) : '-'}</td>
-              <td className="p-2 border">{t.priority}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="bg-gradient-to-r from-gray-50 to-gray-100">
+                <th className="p-3 text-left font-bold text-gray-700 border-b border-gray-200">제목</th>
+                <th className="p-3 text-left font-bold text-gray-700 border-b border-gray-200">소요시간(분)</th>
+                <th className="p-3 text-left font-bold text-gray-700 border-b border-gray-200">마감</th>
+                <th className="p-3 text-left font-bold text-gray-700 border-b border-gray-200">우선순위</th>
+              </tr>
+            </thead>
+            <tbody>
+              {list.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="p-8 text-center text-gray-500 bg-gray-50">
+                    작업이 없습니다
+                  </td>
+                </tr>
+              ) : (
+                list.map(t => (
+                  <tr 
+                    key={t.id}
+                    className={`hover:bg-blue-50 transition-colors ${
+                      newTaskIds.has(t.id) ? 'bg-green-50 animate-pulse' : ''
+                    }`}
+                  >
+                    <td className="p-3 border-b border-gray-100">
+                      {newTaskIds.has(t.id) && (
+                        <span className="inline-block mr-2 px-2 py-0.5 text-xs bg-green-500 text-white rounded-full font-medium">
+                          새 작업
+                        </span>
+                      )}
+                      <span className="font-medium text-gray-900">{t.title}</span>
+                    </td>
+                    <td className="p-3 border-b border-gray-100 text-gray-700">{t.durationMin}분</td>
+                    <td className="p-3 border-b border-gray-100 text-gray-700">
+                      {t.dueAt ? new Date(t.dueAt).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' }) : '-'}
+                    </td>
+                    <td className="p-3 border-b border-gray-100">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        t.priority <= 2 
+                          ? 'bg-red-100 text-red-700' 
+                          : t.priority === 3
+                          ? 'bg-yellow-100 text-yellow-700'
+                          : 'bg-gray-100 text-gray-700'
+                      }`}>
+                        {t.priority}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       {modalOpen && (
-        <div className="fixed inset-0 z-30 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/30" onClick={() => setModalOpen(false)} />
-          <div className="relative z-10 w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl border">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">작업 추가</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="absolute inset-0" onClick={() => setModalOpen(false)} />
+          <div className="relative z-10 w-full max-w-2xl bg-white rounded-xl shadow-2xl border border-gray-200 max-h-[90vh] overflow-y-auto mx-4">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h3 className="text-xl font-bold text-gray-900">작업 추가</h3>
               <button
                 onClick={() => setModalOpen(false)}
-                className="h-8 w-8 rounded-full hover:bg-gray-100"
+                className="text-gray-400 hover:text-gray-600 text-2xl font-bold"
               >
-                ✕
+                ×
               </button>
             </div>
-            <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-3">
-              <input
-                className="border rounded-lg px-3 py-2"
-                placeholder="제목 *"
-                value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                required
-              />
-              <div className="grid grid-cols-2 gap-3">
+            <div className="p-6">
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">제목 *</label>
+                <input
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="작업 제목을 입력하세요"
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">시작 날짜/시간 *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">시작 날짜/시간 *</label>
                   <input
                     type="datetime-local"
-                    className="border rounded-lg px-3 py-2 w-full"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     value={formData.startAt}
                     onChange={(e) => setFormData({ ...formData, startAt: e.target.value })}
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">마감 날짜/시간 *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">마감 날짜/시간 *</label>
                   <input
                     type="datetime-local"
-                    className="border rounded-lg px-3 py-2 w-full"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     value={formData.dueAt}
                     onChange={(e) => setFormData({ ...formData, dueAt: e.target.value })}
                     required
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">우선순위 (1-5)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">우선순위 (1-5)</label>
                   <input
                     type="number"
-                    className="border rounded-lg px-3 py-2 w-full"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     min="1"
                     max="5"
                     value={formData.priority}
@@ -318,9 +357,9 @@ export default function Tasks() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">담당자 (선택)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">담당자 (선택)</label>
                   <select
-                    className="border rounded-lg px-3 py-2 w-full"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     value={formData.assigneeId || ''}
                     onChange={(e) => setFormData({ ...formData, assigneeId: e.target.value ? Number(e.target.value) : undefined })}
                   >
@@ -334,10 +373,10 @@ export default function Tasks() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">태그 (선택)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">태그 (선택)</label>
                 <input
-                  className="border rounded-lg px-3 py-2 w-full"
-                  placeholder="태그"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="태그를 입력하세요"
                   value={formData.tags}
                   onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
                 />
@@ -348,25 +387,69 @@ export default function Tasks() {
                   id="splittable"
                   checked={formData.splittable}
                   onChange={(e) => setFormData({ ...formData, splittable: e.target.checked })}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
-                <label htmlFor="splittable" className="text-sm">분할 가능</label>
+                <label htmlFor="splittable" className="text-sm text-gray-700">분할 가능</label>
               </div>
-              <div className="flex justify-end gap-2 pt-2">
+              
+              {/* 반복 작업 옵션 */}
+              <div className="border-t border-gray-200 pt-4">
+                <label className="flex items-center gap-2 mb-3">
+                  <input
+                    type="checkbox"
+                    checked={formData.recurrenceEnabled}
+                    onChange={(e) => setFormData({ ...formData, recurrenceEnabled: e.target.checked })}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm font-medium text-gray-700">반복 작업</span>
+                </label>
+                
+                {formData.recurrenceEnabled && (
+                  <div className="ml-6 space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">반복 주기</label>
+                      <select
+                        value={formData.recurrenceType}
+                        onChange={(e) => setFormData({ ...formData, recurrenceType: e.target.value as any })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="DAILY">매일</option>
+                        <option value="WEEKLY">매주</option>
+                        <option value="MONTHLY">매월</option>
+                        <option value="YEARLY">매년</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">반복 종료일 (선택사항)</label>
+                      <input
+                        type="datetime-local"
+                        value={formData.recurrenceEndDate}
+                        onChange={(e) => setFormData({ ...formData, recurrenceEndDate: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">비워두면 1년 후까지 반복됩니다</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex items-center justify-end gap-2 pt-4 border-t border-gray-200">
                 <button
                   type="button"
                   onClick={() => setModalOpen(false)}
-                  className="px-4 py-2 rounded-md border"
+                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition"
                 >
                   취소
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-md text-white bg-blue-600 hover:bg-blue-700"
+                  className="px-4 py-2 text-white bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg hover:from-blue-700 hover:to-purple-700 transition shadow-md hover:shadow-lg font-medium"
                 >
                   저장
                 </button>
               </div>
             </form>
+            </div>
           </div>
         </div>
       )}

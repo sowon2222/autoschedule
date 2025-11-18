@@ -1,6 +1,6 @@
 import Header from '../../components/Header'
 import { useEffect, useState } from 'react'
-import { Outlet, useParams } from 'react-router-dom'
+import { Outlet, useParams, useLocation, useNavigate } from 'react-router-dom'
 import type { StompSubscription } from '@stomp/stompjs'
 import {
   createStompClient,
@@ -20,6 +20,8 @@ type ToastItem = {
 export default function TeamLayout() {
   const { id } = useParams()
   const { user } = useAuth()
+  const location = useLocation()
+  const navigate = useNavigate()
   const [notifications, setNotifications] = useState<ToastItem[]>([])
   const [scheduleProgress, setScheduleProgress] = useState<ScheduleProgressMessage | null>(null)
 
@@ -134,14 +136,58 @@ export default function TeamLayout() {
 
       <header className="sticky top-0 z-10 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm">
         <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between">
-          <a href="/dashboard" className="text-lg font-extrabold tracking-tight bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent hover:from-blue-700 hover:to-purple-700 transition-all">
-            TeamSpace
-          </a>
+          <div className="text-lg font-extrabold tracking-tight bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+            {location.pathname.includes('/calendar') || location.pathname === `/team/${id}` 
+              ? '캘린더'
+              : location.pathname.includes('/tasks')
+              ? '작업'
+              : location.pathname.includes('/workhours')
+              ? '근무시간'
+              : location.pathname.includes('/settings')
+              ? '팀 설정'
+              : 'TeamSpace'}
+          </div>
           <nav className="flex items-center gap-1 text-sm">
-            <a className="px-4 py-2 rounded-lg font-medium text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-700 transition-all" href={`/team/${id}/calendar`}>캘린더</a>
-            <a className="px-4 py-2 rounded-lg font-medium text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-700 transition-all" href={`/team/${id}/tasks`}>작업</a>
-            <a className="px-4 py-2 rounded-lg font-medium text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-700 transition-all" href={`/team/${id}/workhours`}>근무시간</a>
-            <a className="px-4 py-2 rounded-lg font-medium text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-700 transition-all" href={`/team/${id}/settings`}>팀 설정</a>
+            <button
+              onClick={() => navigate(`/team/${id}/calendar`)}
+              className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                location.pathname.includes('/calendar') || (location.pathname === `/team/${id}`)
+                  ? 'bg-gradient-to-r from-blue-50 to-purple-50 text-blue-700' 
+                  : 'text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-700'
+              }`}
+            >
+              캘린더
+            </button>
+            <button
+              onClick={() => navigate(`/team/${id}/tasks`)}
+              className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                location.pathname.includes('/tasks')
+                  ? 'bg-gradient-to-r from-blue-50 to-purple-50 text-blue-700' 
+                  : 'text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-700'
+              }`}
+            >
+              작업
+            </button>
+            <button
+              onClick={() => navigate(`/team/${id}/workhours`)}
+              className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                location.pathname.includes('/workhours')
+                  ? 'bg-gradient-to-r from-blue-50 to-purple-50 text-blue-700' 
+                  : 'text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-700'
+              }`}
+            >
+              근무시간
+            </button>
+            <button
+              onClick={() => navigate(`/team/${id}/settings`)}
+              className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                location.pathname.includes('/settings')
+                  ? 'bg-gradient-to-r from-blue-50 to-purple-50 text-blue-700' 
+                  : 'text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-700'
+              }`}
+            >
+              팀 설정
+            </button>
           </nav>
         </div>
       </header>

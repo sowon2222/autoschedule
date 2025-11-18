@@ -4,8 +4,8 @@ import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import interactionPlugin from '@fullcalendar/interaction'
-import type { EventDropArg } from '@fullcalendar/core'
-import type { EventResizeDoneArg } from '@fullcalendar/interaction'
+import type { EventDropArg, EventClickArg } from '@fullcalendar/core'
+import type { EventResizeDoneArg, DateClickArg } from '@fullcalendar/interaction'
 import api from '../../lib/api'
 import type { StompSubscription } from '@stomp/stompjs'
 import {
@@ -17,6 +17,8 @@ import type {
   ConflictAlertMessage,
   TaskEventMessage
 } from '../../lib/ws'
+import CalendarEventModal from '../../components/CalendarEventModal'
+import CreateEventModal from '../../components/CreateEventModal'
 
 type CalendarEvent = {
   id: string
@@ -56,6 +58,10 @@ export default function Calendar() {
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [teamBaseColor, setTeamBaseColor] = useState<string>('#3b82f6')
   const [conflictAlert, setConflictAlert] = useState<ConflictAlertMessage | null>(null)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [selectedEventId, setSelectedEventId] = useState<string>('')
+  const [createModalOpen, setCreateModalOpen] = useState(false)
+  const [createModalDate, setCreateModalDate] = useState<Date | undefined>()
   const teamId = id ? parseInt(id) : 0
   const teamColorRef = useRef<string>(teamBaseColor)
   // 자신이 발생시킨 변경사항 추적 (중복 업데이트 방지)
@@ -257,71 +263,6 @@ export default function Calendar() {
 
   useEffect(() => {
     if (!id) return
-
-    const loadCalendarData = async () => {
-      try {
-        // 팀의 CalendarEvent와 Task를 모두 조회
-        const [eventsResponse, tasksResponse] = await Promise.all([
-          api.get(`/api/events/team/${id}`),
-          api.get(`/api/tasks/team/${id}`)
-        ])
-
-        const calendarEvents: CalendarEvent[] = []
-        
-        // 팀 기본 색상 가져오기
-        const baseColor = getTeamColor(teamId)
-        setTeamBaseColor(baseColor)
-
-        // CalendarEvent 변환
-        eventsResponse.data.forEach((event: Event) => {
-          calendarEvents.push({
-            id: `event-${event.id}`,
-            title: event.title,
-            start: event.startsAt,
-            end: event.endsAt,
-            backgroundColor: '#22c55e',
-            borderColor: '#16a34a',
-            editable: true, // Event는 드래그/수정 가능
-            durationEditable: true, // 하단 리사이즈 가능 (시작 시간은 드래그로 변경)
-            extendedProps: {
-              type: 'event',
-              location: event.location
-            }
-          })
-        })
-
-        // Task 변환 (마감일이 있는 경우만)
-        tasksResponse.data.forEach((task: Task) => {
-          if (task.dueAt) {
-            const startDate = new Date(task.dueAt)
-            const endDate = new Date(startDate.getTime() + task.durationMin * 60 * 1000)
-            
-            const priority = task.priority || 3
-            const colors = getColorByPriority(baseColor, priority)
-            
-            calendarEvents.push({
-              id: `task-${task.id}`,
-              title: `📋 ${task.title}`,
-              start: startDate.toISOString(),
-              end: endDate.toISOString(),
-              backgroundColor: colors.bg,
-              borderColor: colors.border,
-              editable: true, // Task도 드래그/수정 가능
-              durationEditable: true, // 하단 리사이즈 가능 (시작 시간은 드래그로 변경)
-              extendedProps: {
-                type: 'task',
-                priority: task.priority
-              }
-            })
-          }
-        })
-
-        setEvents(calendarEvents)
-      } catch (error) {
-        console.error('캘린더 데이터를 불러오는 중 오류가 발생했습니다.', error)
-      }
-    }
-
     loadCalendarData()
   }, [id, teamId])
 
@@ -491,6 +432,81 @@ export default function Calendar() {
     }
   }, [id])
 
+  const handleEventClick = (clickInfo: EventClickArg) => {
+    setSelectedEventId(clickInfo.event.id)
+    setModalOpen(true)
+  }
+
+  const handleDateClick = (dateClickArg: DateClickArg) => {
+    setCreateModalDate(dateClickArg.date)
+    setCreateModalOpen(true)
+  }
+
+  const loadCalendarData = async () => {
+    if (!id) return
+    try {
+      // 팀의 CalendarEvent와 Task를 모두 조회
+      const [eventsResponse, tasksResponse] = await Promise.all([
+        api.get(`/api/events/team/${id}`),
+        api.get(`/api/tasks/team/${id}`)
+      ])
+
+      const calendarEvents: CalendarEvent[] = []
+      
+      // 팀 기본 색상 가져오기
+      const baseColor = getTeamColor(teamId)
+      setTeamBaseColor(baseColor)
+
+      // CalendarEvent 변환
+      eventsResponse.data.forEach((event: Event) => {
+        calendarEvents.push({
+          id: `event-${event.id}`,
+          title: event.title,
+          start: event.startsAt,
+          end: event.endsAt,
+          backgroundColor: '#22c55e',
+          borderColor: '#16a34a',
+          editable: true,
+          durationEditable: true,
+          extendedProps: {
+            type: 'event',
+            location: event.location
+          }
+        })
+      })
+
+      // Task 변환 (마감일이 있는 경우만)
+      tasksResponse.data.forEach((task: Task) => {
+        if (task.dueAt) {
+          const startDate = new Date(task.dueAt)
+          const endDate = new Date(startDate.getTime() + task.durationMin * 60 * 1000)
+          
+          const priority = task.priority || 3
+          const colors = getColorByPriority(baseColor, priority)
+          
+          calendarEvents.push({
+            id: `task-${task.id}`,
+            title: `📋 ${task.title}`,
+            start: startDate.toISOString(),
+            end: endDate.toISOString(),
+            backgroundColor: colors.bg,
+            borderColor: colors.border,
+            editable: true,
+            durationEditable: true,
+            extendedProps: {
+              type: 'task',
+              priority: task.priority
+            }
+          })
+        }
+      })
+
+      setEvents(calendarEvents)
+    } catch (error) {
+      console.error('캘린더 데이터를 불러오는 중 오류가 발생했습니다.', error)
+    }
+  }
+
   return (
     <div className="p-6 bg-gradient-to-br from-gray-50 to-white min-h-screen">
       {conflictAlert && (
@@ -520,26 +536,15 @@ export default function Calendar() {
         </div>
       )}
       <div className="mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-3xl font-extrabold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-            캘린더
-          </h2>
-        </div>
-        <div className="bg-white rounded-xl shadow-md p-5 border border-gray-200">
-          <div className="space-y-3">
-            <div className="flex gap-6 text-sm flex-wrap">
-              <div className="flex items-center gap-2.5 px-3 py-2 bg-green-50 rounded-lg border border-green-200">
-                <div className="w-4 h-4 rounded-full bg-gradient-to-br from-green-500 to-green-600 shadow-sm"></div>
-                <span className="font-medium text-gray-700">일정 (Event)</span>
-              </div>
-              <div className="flex items-center gap-2.5 px-3 py-2 bg-blue-50 rounded-lg border border-blue-200">
-                <div className="w-4 h-4 rounded-full shadow-sm" style={{ backgroundColor: teamBaseColor }}></div>
-                <span className="font-medium text-gray-700">작업 (Task) - 팀 색상</span>
-              </div>
+        <div className="bg-white rounded-xl shadow-lg p-5 border border-gray-200">
+          <div className="flex gap-6 text-sm flex-wrap">
+            <div className="flex items-center gap-2.5 px-3 py-2 bg-green-50 rounded-lg border border-green-200">
+              <div className="w-4 h-4 rounded-full bg-gradient-to-br from-green-500 to-green-600 shadow-sm"></div>
+              <span className="font-medium text-gray-700">일정 (Event)</span>
             </div>
-            <div className="text-xs text-gray-600 bg-gray-50 rounded-lg px-3 py-2 border border-gray-200">
-              <span className="font-semibold text-gray-700">우선순위 색상 진하기:</span> 
-              <span className="ml-2">1(가장 진함) → 5(가장 연함)</span>
+            <div className="flex items-center gap-2.5 px-3 py-2 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="w-4 h-4 rounded-full shadow-sm" style={{ backgroundColor: teamBaseColor }}></div>
+              <span className="font-medium text-gray-700">작업 (Task) - 팀 색상</span>
             </div>
           </div>
         </div>
@@ -694,6 +699,8 @@ export default function Calendar() {
           eventDurationEditable={true}
           eventDrop={handleEventDrop}
           eventResize={handleEventResize}
+          eventClick={handleEventClick}
+          dateClick={handleDateClick}
           height="auto"
           locale="ko"
           buttonText={{
@@ -709,6 +716,31 @@ export default function Calendar() {
           slotEventOverlap={true}
         />
       </div>
+      <CalendarEventModal
+        isOpen={modalOpen}
+        onClose={() => {
+          setModalOpen(false)
+          setSelectedEventId('')
+        }}
+        eventId={selectedEventId}
+        onUpdate={() => {
+          // 모달에서 업데이트 후 이벤트 목록 새로고침
+          loadCalendarData()
+        }}
+      />
+      <CreateEventModal
+        isOpen={createModalOpen}
+        onClose={() => {
+          setCreateModalOpen(false)
+          setCreateModalDate(undefined)
+        }}
+        defaultDate={createModalDate}
+        teamId={teamId}
+        onSuccess={() => {
+          // 이벤트 생성 후 목록 새로고침
+          loadCalendarData()
+        }}
+      />
     </div>
   )
 }

@@ -47,16 +47,10 @@ export default function Settings(){
   }
 
   return (
-    <div className="p-6 bg-gradient-to-br from-gray-50 to-white min-h-screen">
-      <div className="mb-6">
-        <h2 className="text-3xl font-extrabold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
-          팀 설정
-        </h2>
-        <p className="text-gray-600">팀을 생성하고 멤버를 관리하세요</p>
-      </div>
+    <div className="p-6">
       <div className="grid gap-6">
         {showCreateTeam && (
-          <section className="border-2 border-gray-200 rounded-xl p-6 bg-white shadow-lg hover:shadow-xl transition-shadow">
+          <section className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
             <h3 className="text-xl font-bold mb-4 text-gray-800 flex items-center gap-2">
               <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -65,19 +59,19 @@ export default function Settings(){
             </h3>
             <div className="flex gap-3 items-center">
               <input 
-                className="border-2 border-gray-300 rounded-lg px-4 py-2.5 flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" 
+                className="border border-gray-300 rounded-lg px-4 py-2.5 flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" 
                 placeholder="팀 이름을 입력하세요" 
                 value={teamName} 
                 onChange={e=>setTeamName(e.target.value)} 
               />
               <button 
-                className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2.5 rounded-lg cursor-pointer hover:from-blue-700 hover:to-purple-700 transition-all shadow-md hover:shadow-lg font-medium" 
+                className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2.5 rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all shadow-md hover:shadow-lg font-medium" 
                 onClick={createTeam}
               >
                 생성
               </button>
               <button 
-                className="bg-gray-200 text-gray-700 px-6 py-2.5 rounded-lg cursor-pointer hover:bg-gray-300 transition-all shadow-md hover:shadow-lg font-medium" 
+                className="bg-gray-100 text-gray-700 px-6 py-2.5 rounded-lg hover:bg-gray-200 transition font-medium" 
                 onClick={() => {
                   setShowCreateTeam(false)
                   setTeamName('')
@@ -90,13 +84,16 @@ export default function Settings(){
         )}
 
         {id && currentTeam && (
-          <section className="border-2 border-gray-200 rounded-xl p-6 bg-white shadow-lg hover:shadow-xl transition-shadow">
+          <section className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
             <div className="flex items-center justify-between">
-              <span className="text-xl font-bold text-gray-800">
-                {currentTeam.name}
-              </span>
+              <div>
+                <h3 className="text-xl font-bold text-gray-800 mb-1">
+                  {currentTeam.name}
+                </h3>
+                <p className="text-sm text-gray-600">현재 팀</p>
+              </div>
               <button 
-                className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-2 rounded-lg cursor-pointer hover:from-blue-700 hover:to-purple-700 transition-all shadow-md hover:shadow-lg font-medium text-sm flex items-center gap-2"
+                className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-2 rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all shadow-md hover:shadow-lg font-medium text-sm flex items-center gap-2"
                 onClick={() => setShowCreateTeam(true)}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -108,7 +105,7 @@ export default function Settings(){
           </section>
         )}
 
-        <section className="border-2 border-gray-200 rounded-xl p-6 bg-white shadow-lg hover:shadow-xl transition-shadow">
+        <section className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
           <h3 className="text-xl font-bold mb-4 text-gray-800 flex items-center gap-2">
             <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -117,13 +114,13 @@ export default function Settings(){
           </h3>
           <div className="flex gap-3 items-center">
             <input 
-              className="border-2 border-gray-300 rounded-lg px-4 py-2.5 flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" 
+              className="border border-gray-300 rounded-lg px-4 py-2.5 flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" 
               placeholder="이메일 주소를 입력하세요" 
               value={inviteEmail} 
               onChange={e=>setInviteEmail(e.target.value)} 
             />
             <button 
-              className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2.5 rounded-lg cursor-pointer hover:from-blue-700 hover:to-purple-700 transition-all shadow-md hover:shadow-lg font-medium" 
+              className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2.5 rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all shadow-md hover:shadow-lg font-medium" 
               onClick={invite}
             >
               초대
@@ -131,7 +128,7 @@ export default function Settings(){
           </div>
         </section>
 
-        <section className="border-2 border-gray-200 rounded-xl p-6 bg-white shadow-lg hover:shadow-xl transition-shadow">
+        <section className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
           <h3 className="text-xl font-bold mb-4 text-gray-800 flex items-center gap-2">
             <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
@@ -139,20 +136,20 @@ export default function Settings(){
             팀 멤버
           </h3>
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-sm">
+            <table className="w-full border-collapse">
               <thead>
               <tr className="bg-gradient-to-r from-gray-50 to-gray-100">
-                <th className="border-2 border-gray-300 p-3 text-left font-bold text-gray-700">이름</th>
-                <th className="border-2 border-gray-300 p-3 text-left font-bold text-gray-700">이메일</th>
-                <th className="border-2 border-gray-300 p-3 font-bold text-gray-700">역할</th>
+                <th className="p-3 text-left font-bold text-gray-700 border-b border-gray-200">이름</th>
+                <th className="p-3 text-left font-bold text-gray-700 border-b border-gray-200">이메일</th>
+                <th className="p-3 text-left font-bold text-gray-700 border-b border-gray-200">역할</th>
               </tr>
               </thead>
               <tbody>
               {members.map(m => (
                 <tr key={m.userId} className="hover:bg-blue-50 transition-colors">
-                  <td className="border-2 border-gray-300 p-3 font-medium">{m.userName}</td>
-                  <td className="border-2 border-gray-300 p-3">{m.userEmail}</td>
-                  <td className="border-2 border-gray-300 p-3 text-center">
+                  <td className="p-3 border-b border-gray-100 font-medium text-gray-900">{m.userName}</td>
+                  <td className="p-3 border-b border-gray-100 text-gray-700">{m.userEmail}</td>
+                  <td className="p-3 border-b border-gray-100">
                     <span className="px-3 py-1 rounded-full bg-blue-100 text-blue-700 font-medium text-xs">
                       {m.role}
                     </span>
@@ -161,8 +158,8 @@ export default function Settings(){
               ))}
               {members.length === 0 && (
                 <tr>
-                  <td colSpan={3} className="border-2 border-gray-300 p-4 text-gray-500 text-center bg-gray-50">
-                    멤버가 없습니다.
+                  <td colSpan={3} className="p-8 text-gray-500 text-center bg-gray-50">
+                    멤버가 없습니다
                   </td>
                 </tr>
               )}
