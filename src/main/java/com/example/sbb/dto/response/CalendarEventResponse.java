@@ -20,6 +20,8 @@ public class CalendarEventResponse {
     private String location;
     private String attendees;
     private String notes;
+    private String recurrenceType;
+    private OffsetDateTime recurrenceEndDate;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
 }

@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -67,6 +68,23 @@ public class TaskService {
         task.setTags(request.getTags());
         task.setCreatedAt(OffsetDateTime.now());
         task.setUpdatedAt(OffsetDateTime.now());
+        
+        // 반복 종료일 설정: 없으면 1년 후까지
+        OffsetDateTime recurrenceEndDate = request.getRecurrenceEndDate();
+        if (recurrenceEndDate == null && request.getRecurrenceType() != null && !request.getRecurrenceType().isEmpty()) {
+            if (request.getDueAt() != null) {
+                recurrenceEndDate = request.getDueAt().plusYears(1);
+            } else {
+                recurrenceEndDate = OffsetDateTime.now().plusYears(1);
+            }
+        }
+        
+        // 반복 작업이 있으면 여러 개 생성
+        if (request.getRecurrenceType() != null && !request.getRecurrenceType().isEmpty() && request.getDueAt() != null) {
+            return createRecurringTasks(task, request.getRecurrenceType(), recurrenceEndDate);
+        }
+        
+        // 반복이 없으면 단일 작업만 생성
         Task saved = taskRepository.save(task);
         TaskResponse response = toResponse(saved);
         TaskEventMessage message = TaskEventMessage.created(response);
@@ -206,6 +224,78 @@ public class TaskService {
                     "작업 '" + task.getTitle() + "' 이(가) 당신에게 재배정되었습니다.")
             );
         }
+    }
+    
+    /**
+     * 반복 작업 생성
+     */
+    private TaskResponse createRecurringTasks(Task template, String recurrenceType, OffsetDateTime endDate) {
+        List<Task> tasks = new ArrayList<>();
+        OffsetDateTime currentDueAt = template.getDueAt();
+        
+        int count = 0;
+        int maxTasks = 500; // 최대 500개까지만 생성 (무한 반복 방지)
+        
+        while (currentDueAt != null && currentDueAt.isBefore(endDate) && count < maxTasks) {
+            Task task = new Task();
+            task.setTeam(template.getTeam());
+            task.setAssignee(template.getAssignee());
+            task.setTitle(template.getTitle());
+            task.setDurationMin(template.getDurationMin());
+            task.setPriority(template.getPriority());
+            task.setDueAt(currentDueAt);
+            task.setSplittable(template.isSplittable());
+            task.setTags(template.getTags());
+            task.setCreatedAt(OffsetDateTime.now());
+            task.setUpdatedAt(OffsetDateTime.now());
+            
+            tasks.add(task);
+            count++;
+            
+            // 다음 반복 날짜 계산
+            switch (recurrenceType) {
+                case "DAILY":
+                    currentDueAt = currentDueAt.plusDays(1);
+                    break;
+                case "WEEKLY":
+                    currentDueAt = currentDueAt.plusWeeks(1);
+                    break;
+                case "MONTHLY":
+                    currentDueAt = currentDueAt.plusMonths(1);
+                    break;
+                case "YEARLY":
+                    currentDueAt = currentDueAt.plusYears(1);
+                    break;
+                default:
+                    // 알 수 없는 반복 타입이면 첫 번째만 저장하고 종료
+                    break;
+            }
+        }
+        
+        // 모든 반복 작업 저장
+        List<Task> savedTasks = taskRepository.saveAll(tasks);
+        
+        // 첫 번째 작업을 응답으로 반환
+        TaskResponse response = toResponse(savedTasks.get(0));
+        
+        // 각 작업에 대해 이벤트 발행
+        for (Task saved : savedTasks) {
+            TaskEventMessage message = TaskEventMessage.created(toResponse(saved));
+            eventPublisher.publishTaskEvent(message);
+            publishTaskCreatedNotification(saved);
+        }
+        
+        if (template.getTeam() != null) {
+            eventPublisher.publishNotification(
+                CollaborationNotificationMessage.team(
+                    template.getTeam().getId(),
+                    "TASK_CREATED",
+                    "새 반복 작업 생성",
+                    "반복 작업 '" + template.getTitle() + "' " + count + "개가 생성되었습니다.")
+            );
+        }
+        
+        return response;
     }
 }
 

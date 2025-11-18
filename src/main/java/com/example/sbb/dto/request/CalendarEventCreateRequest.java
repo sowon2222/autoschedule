@@ -39,5 +39,11 @@ public class CalendarEventCreateRequest {
     private String attendees;  // "3,5,9" 형태, nullable
     @Schema(description = "이벤트 메모", example = "자료 준비 필수")
     private String notes;  // nullable
+    
+    @Schema(description = "반복 주기", example = "WEEKLY", allowableValues = {"DAILY", "WEEKLY", "MONTHLY", "YEARLY"})
+    private String recurrenceType;  // 'DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY', null
+    
+    @Schema(description = "반복 종료일", example = "2025-12-31T23:59:59+09:00")
+    private OffsetDateTime recurrenceEndDate;  // nullable, null이면 1년 후까지
 }
 

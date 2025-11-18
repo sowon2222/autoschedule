@@ -22,7 +22,7 @@ EC2 인스턴스에 AutoSchedule을 배포하는 단계별 가이드입니다.
 
 ```powershell
 # Windows (PowerShell)
-ssh -i $KEY_PATH ubuntu@$EC2_IP
+ssh -i "C:\Users\sowon\Downloads\autoschedule-keypair.pem" ubuntu@3.106.203.246
 ```
 
 ### 시스템 업데이트
@@ -39,7 +39,7 @@ sudo apt install openjdk-17-jdk -y
 java -version  # 확인: openjdk version "17.0.x"
 ```
 
-### PostgreSQL 설치 및 설정
+### PostgreSQL 설치 및 설정 / RDS 는 ㅠ 알바 퇴직금 받고 해보기로 
 
 ```bash
 # PostgreSQL 설치

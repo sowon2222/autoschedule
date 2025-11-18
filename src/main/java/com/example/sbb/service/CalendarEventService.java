@@ -16,6 +16,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -66,8 +68,24 @@ public class CalendarEventService {
         e.setFixed(request.getFixed() != null && request.getFixed());
         e.setAttendees(request.getAttendees());
         e.setNotes(request.getNotes());
+        e.setRecurrenceType(request.getRecurrenceType());
+        
+        // 반복 종료일 설정: 없으면 1년 후까지
+        OffsetDateTime recurrenceEndDate = request.getRecurrenceEndDate();
+        if (recurrenceEndDate == null && request.getRecurrenceType() != null) {
+            recurrenceEndDate = request.getStartsAt().plusYears(1);
+        }
+        e.setRecurrenceEndDate(recurrenceEndDate);
+        
         e.setCreatedAt(OffsetDateTime.now());
         e.setUpdatedAt(OffsetDateTime.now());
+        
+        // 반복 일정이 있으면 여러 개 생성
+        if (request.getRecurrenceType() != null && !request.getRecurrenceType().isEmpty()) {
+            return createRecurringEvents(e, request.getRecurrenceType(), recurrenceEndDate);
+        }
+        
+        // 반복이 없으면 단일 이벤트만 생성
         CalendarEvent saved = calendarEventRepository.save(e);
         CalendarEventResponse response = toResponse(saved);
         eventPublisher.publishCalendarEvent(CalendarEventMessage.created(response));
@@ -122,6 +140,8 @@ public class CalendarEventService {
         if (request.getFixed() != null) e.setFixed(request.getFixed());
         if (request.getAttendees() != null) e.setAttendees(request.getAttendees());
         if (request.getNotes() != null) e.setNotes(request.getNotes());
+        if (request.getRecurrenceType() != null) e.setRecurrenceType(request.getRecurrenceType());
+        if (request.getRecurrenceEndDate() != null) e.setRecurrenceEndDate(request.getRecurrenceEndDate());
         e.setUpdatedAt(OffsetDateTime.now());
         CalendarEvent saved = calendarEventRepository.save(e);
         CalendarEventResponse response = toResponse(saved);
@@ -155,9 +175,84 @@ public class CalendarEventService {
         r.setFixed(e.isFixed());
         r.setAttendees(e.getAttendees());
         r.setNotes(e.getNotes());
+        r.setRecurrenceType(e.getRecurrenceType());
+        r.setRecurrenceEndDate(e.getRecurrenceEndDate());
         r.setCreatedAt(e.getCreatedAt());
         r.setUpdatedAt(e.getUpdatedAt());
         return r;
+    }
+
+    /**
+     * 반복 일정 생성
+     */
+    private CalendarEventResponse createRecurringEvents(CalendarEvent template, String recurrenceType, OffsetDateTime endDate) {
+        List<CalendarEvent> events = new ArrayList<>();
+        OffsetDateTime currentStart = template.getStartsAt();
+        OffsetDateTime currentEnd = template.getEndsAt();
+        long durationMinutes = ChronoUnit.MINUTES.between(currentStart, currentEnd);
+        
+        int count = 0;
+        int maxEvents = 500; // 최대 500개까지만 생성 (무한 반복 방지)
+        
+        while (currentStart.isBefore(endDate) && count < maxEvents) {
+            CalendarEvent event = new CalendarEvent();
+            event.setTeam(template.getTeam());
+            event.setOwner(template.getOwner());
+            event.setTitle(template.getTitle());
+            event.setLocation(template.getLocation());
+            event.setStartsAt(currentStart);
+            event.setEndsAt(currentEnd);
+            event.setFixed(template.isFixed());
+            event.setAttendees(template.getAttendees());
+            event.setNotes(template.getNotes());
+            event.setRecurrenceType(recurrenceType);
+            event.setRecurrenceEndDate(endDate);
+            event.setCreatedAt(OffsetDateTime.now());
+            event.setUpdatedAt(OffsetDateTime.now());
+            
+            events.add(event);
+            count++;
+            
+            // 다음 반복 날짜 계산
+            switch (recurrenceType) {
+                case "DAILY":
+                    currentStart = currentStart.plusDays(1);
+                    currentEnd = currentStart.plusMinutes(durationMinutes);
+                    break;
+                case "WEEKLY":
+                    currentStart = currentStart.plusWeeks(1);
+                    currentEnd = currentStart.plusMinutes(durationMinutes);
+                    break;
+                case "MONTHLY":
+                    currentStart = currentStart.plusMonths(1);
+                    currentEnd = currentStart.plusMinutes(durationMinutes);
+                    break;
+                case "YEARLY":
+                    currentStart = currentStart.plusYears(1);
+                    currentEnd = currentStart.plusMinutes(durationMinutes);
+                    break;
+                default:
+                    // 알 수 없는 반복 타입이면 첫 번째만 저장하고 종료
+                    break;
+            }
+        }
+        
+        // 모든 반복 일정 저장
+        List<CalendarEvent> savedEvents = calendarEventRepository.saveAll(events);
+        
+        // 첫 번째 이벤트를 응답으로 반환
+        CalendarEventResponse response = toResponse(savedEvents.get(0));
+        
+        // 각 이벤트에 대해 알림 발행
+        for (CalendarEvent saved : savedEvents) {
+            eventPublisher.publishCalendarEvent(CalendarEventMessage.created(toResponse(saved)));
+            publishConflicts(saved);
+        }
+        
+        publishCalendarNotification(template, "CALENDAR_CREATED", "새 반복 일정 생성", 
+            "반복 일정 '" + template.getTitle() + "' " + count + "개가 생성되었습니다.");
+        
+        return response;
     }
 
     private void publishConflicts(CalendarEvent event) {

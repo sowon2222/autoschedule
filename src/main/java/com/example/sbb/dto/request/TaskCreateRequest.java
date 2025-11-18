@@ -44,5 +44,11 @@ public class TaskCreateRequest {
     
     @Schema(description = "태그 목록", example = "backend,api")
     private String tags;  // nullable
+    
+    @Schema(description = "반복 주기", example = "WEEKLY", allowableValues = {"DAILY", "WEEKLY", "MONTHLY", "YEARLY"})
+    private String recurrenceType;
+    
+    @Schema(description = "반복 종료일", example = "2025-12-31T23:59:59+09:00")
+    private OffsetDateTime recurrenceEndDate;
 }
 

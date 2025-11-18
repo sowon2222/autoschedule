@@ -51,6 +51,12 @@ public class CalendarEvent {
 
     private String notes;
 
+    @Column(name = "recurrence_type")
+    private String recurrenceType;  // 'DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY', null
+
+    @Column(name = "recurrence_end_date")
+    private OffsetDateTime recurrenceEndDate;  // 반복 종료일, null이면 무제한
+
     @Version
     private Long version;
 

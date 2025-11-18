@@ -24,6 +24,12 @@ public class CalendarEventUpdateRequest {
     private String attendees;  // "3,5,9" 형태, nullable
     @Schema(description = "이벤트 메모", example = "안건 공유 예정")
     private String notes;  // nullable
+    
+    @Schema(description = "반복 주기", example = "WEEKLY", allowableValues = {"DAILY", "WEEKLY", "MONTHLY", "YEARLY"})
+    private String recurrenceType;  // 'DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY', null
+    
+    @Schema(description = "반복 종료일", example = "2025-12-31T23:59:59+09:00")
+    private OffsetDateTime recurrenceEndDate;  // nullable
     // teamId, ownerId는 변경 불가
 }
 
