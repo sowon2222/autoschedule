@@ -1,33 +1,51 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../lib/api'
 import { useAuth } from '../store/auth'
 
 export default function Login() {
   const { setUser } = useAuth()
+  const [error, setError] = useState<string>('')
+  const [isLoading, setIsLoading] = useState(false)
   
   async function submit(e: React.FormEvent) {
     e.preventDefault()
-    const f = new FormData(e.target as HTMLFormElement)
-    const { data } = await api.post('/api/auth/login', {
-      email: f.get('email'),
-      password: f.get('password')
-    })
-    localStorage.setItem('accessToken', data.accessToken)
-    localStorage.setItem('refreshToken', data.refreshToken)
-    localStorage.setItem('userEmail', data.email)
-    localStorage.setItem('userName', data.name)
-    if (data.userId) {
-      localStorage.setItem('userId', String(data.userId))
+    setError('')
+    setIsLoading(true)
+    
+    try {
+      const f = new FormData(e.target as HTMLFormElement)
+      const { data } = await api.post('/api/auth/login', {
+        email: f.get('email'),
+        password: f.get('password')
+      })
+      localStorage.setItem('accessToken', data.accessToken)
+      localStorage.setItem('refreshToken', data.refreshToken)
+      localStorage.setItem('userEmail', data.email)
+      localStorage.setItem('userName', data.name)
+      if (data.userId) {
+        localStorage.setItem('userId', String(data.userId))
+      }
+      
+      // 사용자 정보를 store에 설정
+      setUser({
+        id: data.userId,
+        email: data.email,
+        name: data.name
+      })
+      
+      location.href = '/'
+    } catch (err: any) {
+      let errorMessage = '로그인에 실패했습니다.'
+      if (err.response?.data?.message) {
+        errorMessage = err.response.data.message
+      } else if (err.message) {
+        errorMessage = err.message
+      }
+      setError(errorMessage)
+    } finally {
+      setIsLoading(false)
     }
-    
-    // 사용자 정보를 store에 설정
-    setUser({
-      id: data.userId,
-      email: data.email,
-      name: data.name
-    })
-    
-    location.href = '/'
   }
   
   return (
@@ -50,6 +68,13 @@ export default function Login() {
           </div>
 
           <div className="p-8">
+            {/* 에러 메시지 표시 */}
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-600">
+                {error}
+              </div>
+            )}
+            
             <form onSubmit={submit} className="space-y-6">
               {/* 이메일 */}
               <div>
@@ -92,9 +117,10 @@ export default function Login() {
               {/* 로그인 버튼 */}
               <button
                 type="submit"
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-md transition"
+                disabled={isLoading}
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-md transition"
               >
-                로그인
+                {isLoading ? '로그인 중...' : '로그인'}
               </button>
 
               {/* 패스키 로그인 (보조 버튼) */}

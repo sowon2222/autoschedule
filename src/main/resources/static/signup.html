@@ -110,8 +110,15 @@
       });
 
       if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || '회원가입 실패');
+        let errorMessage = '회원가입에 실패했습니다.';
+        try {
+          const errorData = await res.json();
+          errorMessage = errorData.message || errorMessage;
+        } catch (e) {
+          const text = await res.text();
+          errorMessage = text || errorMessage;
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await res.json();
@@ -127,7 +134,7 @@
     } catch (err) {
       submitBtn.disabled = false;
       submitBtn.innerHTML = originalText;
-      alert('에러: ' + err.message);
+      alert(err.message);
     }
   });
 </script>
