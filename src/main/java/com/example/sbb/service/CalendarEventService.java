@@ -94,26 +94,30 @@ public class CalendarEventService {
         return response;
     }
 
+    @Transactional(readOnly = true)
     public CalendarEventResponse findById(Long id) {
-        CalendarEvent e = calendarEventRepository.findById(id)
+        return calendarEventRepository.findResponseById(id)
             .orElseThrow(() -> new IllegalArgumentException("이벤트를 찾을 수 없습니다: " + id));
-        return toResponse(e);
     }
 
+    @Transactional(readOnly = true)
     public List<CalendarEventResponse> findByTeam(Long teamId) {
-        return calendarEventRepository.findByTeam_Id(teamId).stream().map(this::toResponse).collect(Collectors.toList());
+        return calendarEventRepository.findResponsesByTeamId(teamId);
     }
 
+    @Transactional(readOnly = true)
     public List<CalendarEventResponse> findByTeamAndRange(Long teamId, java.time.OffsetDateTime start, java.time.OffsetDateTime end) {
-        return calendarEventRepository.findByTeam_IdAndStartsAtBetween(teamId, start, end).stream().map(this::toResponse).collect(Collectors.toList());
+        return calendarEventRepository.findResponsesByTeamIdAndRange(teamId, start, end);
     }
 
+    @Transactional(readOnly = true)
     public List<CalendarEventResponse> findByOwner(Long ownerId) {
-        return calendarEventRepository.findByOwner_Id(ownerId).stream().map(this::toResponse).collect(Collectors.toList());
+        return calendarEventRepository.findResponsesByOwnerId(ownerId);
     }
 
+    @Transactional(readOnly = true)
     public List<CalendarEventResponse> findByOwnerAndRange(Long ownerId, java.time.OffsetDateTime start, java.time.OffsetDateTime end) {
-        return calendarEventRepository.findByOwner_IdAndStartsAtBetween(ownerId, start, end).stream().map(this::toResponse).collect(Collectors.toList());
+        return calendarEventRepository.findResponsesByOwnerIdAndRange(ownerId, start, end);
     }
 
     @Transactional
@@ -259,10 +263,11 @@ public class CalendarEventService {
         if (event.getTeam() == null) {
             return;
         }
-        List<CalendarEventResponse> conflicts = calendarEventRepository.findByTeam_Id(event.getTeam().getId()).stream()
+        // DTO 프로젝션으로 조회하여 충돌 검사 (성능 최적화)
+        List<CalendarEventResponse> allResponses = calendarEventRepository.findResponsesByTeamId(event.getTeam().getId());
+        List<CalendarEventResponse> conflicts = allResponses.stream()
             .filter(existing -> !Objects.equals(existing.getId(), event.getId()))
-            .filter(existing -> isOverlapping(existing, event))
-            .map(this::toResponse)
+            .filter(existing -> isOverlappingResponse(existing, event))
             .collect(Collectors.toList());
         if (!conflicts.isEmpty()) {
             CalendarEventResponse source = toResponse(event);
@@ -278,6 +283,10 @@ public class CalendarEventService {
     }
 
     private boolean isOverlapping(CalendarEvent existing, CalendarEvent target) {
+        return existing.getStartsAt().isBefore(target.getEndsAt()) && existing.getEndsAt().isAfter(target.getStartsAt());
+    }
+    
+    private boolean isOverlappingResponse(CalendarEventResponse existing, CalendarEvent target) {
         return existing.getStartsAt().isBefore(target.getEndsAt()) && existing.getEndsAt().isAfter(target.getStartsAt());
     }
 

@@ -51,7 +51,6 @@ public class WebSocketSecurityProperties {
         // 1순위: 시스템 환경 변수 직접 읽기
         String envValue = System.getenv("APP_WEBSOCKET_ALLOWED_ORIGINS");
         if (StringUtils.hasText(envValue)) {
-            System.out.println("[WebSocket] Using environment variable APP_WEBSOCKET_ALLOWED_ORIGINS: " + envValue);
             return Arrays.stream(envValue.split(","))
                     .map(String::trim)
                     .filter(StringUtils::hasText)
@@ -60,7 +59,6 @@ public class WebSocketSecurityProperties {
         
         // 2순위: @Value로 주입된 값
         if (StringUtils.hasText(allowedOriginsEnv)) {
-            System.out.println("[WebSocket] Using @Value injected allowedOriginsEnv: " + allowedOriginsEnv);
             return Arrays.stream(allowedOriginsEnv.split(","))
                     .map(String::trim)
                     .filter(StringUtils::hasText)
@@ -68,7 +66,6 @@ public class WebSocketSecurityProperties {
         }
         
         // 3순위: application.properties 기본값
-        System.out.println("[WebSocket] Using default allowedOrigins from application.properties: " + allowedOrigins);
         return allowedOrigins;
     }
 

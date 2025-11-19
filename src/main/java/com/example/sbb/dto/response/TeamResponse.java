@@ -1,13 +1,17 @@
 package com.example.sbb.dto.response;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.OffsetDateTime;
 
 @Getter
 @Setter
+@NoArgsConstructor
+@AllArgsConstructor
 @Schema(description = "팀 응답 DTO")
 public class TeamResponse {
     @Schema(description = "팀 ID", example = "1")

@@ -2,7 +2,9 @@ package com.example.sbb.dto.response;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import com.example.sbb.domain.Role;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
@@ -10,6 +12,8 @@ import lombok.Setter;
  */
 @Getter
 @Setter
+@NoArgsConstructor
+@AllArgsConstructor
 @Schema(description = "팀 구성원 응답 DTO")
 public class TeamMemberResponse {
     @Schema(description = "팀 ID", example = "1")

@@ -211,9 +211,7 @@ public class TeamService {
      */
     @Transactional(readOnly = true)
     public List<TeamMemberResponse> listMembers(Long teamId) {
-        return teamMemberRepository.findByTeam_Id(teamId).stream()
-            .map(this::toMemberResponse)
-            .collect(Collectors.toList());
+        return teamMemberRepository.findResponsesByTeamId(teamId);
     }
 
     /**
@@ -224,10 +222,7 @@ public class TeamService {
      */
     @Transactional(readOnly = true)
     public List<TeamResponse> findTeamsByUser(Long userId) {
-        return teamMemberRepository.findByUser_Id(userId).stream()
-            .map(TeamMember::getTeam)
-            .map(this::toResponse)
-            .collect(Collectors.toList());
+        return teamMemberRepository.findTeamResponsesByUserId(userId);
     }
 
     // ========== 내부 메서드 ==========

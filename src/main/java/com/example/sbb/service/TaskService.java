@@ -93,18 +93,20 @@ public class TaskService {
         return response;
     }
 
+    @Transactional(readOnly = true)
     public TaskResponse findById(Long id) {
-        Task task = taskRepository.findById(id)
+        return taskRepository.findResponseById(id)
             .orElseThrow(() -> new IllegalArgumentException("작업을 찾을 수 없습니다: " + id));
-        return toResponse(task);
     }
 
+    @Transactional(readOnly = true)
     public List<TaskResponse> findByTeamId(Long teamId) {
-        return taskRepository.findByTeam_Id(teamId).stream().map(this::toResponse).collect(Collectors.toList());
+        return taskRepository.findResponsesByTeamId(teamId);
     }
 
+    @Transactional(readOnly = true)
     public List<TaskResponse> findByAssigneeId(Long assigneeId) {
-        return taskRepository.findByAssignee_Id(assigneeId).stream().map(this::toResponse).collect(Collectors.toList());
+        return taskRepository.findResponsesByAssigneeId(assigneeId);
     }
 
     @Transactional
