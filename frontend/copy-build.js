@@ -5,7 +5,7 @@ const src = 'dist';
 const dest = '../src/main/resources/static';
 
 if (!fs.existsSync(src)) {
-  console.error('❌ dist 폴더가 없습니다. 먼저 npm run build를 실행하세요.');
+  console.error('dist 폴더가 없습니다. 먼저 npm run build를 실행하세요.');
   process.exit(1);
 }
 
@@ -25,7 +25,7 @@ if (fs.existsSync(dest)) {
           fs.unlinkSync(destPath);
         }
       } catch (err) {
-        console.warn(`⚠️  파일 삭제 실패: ${f}`, err.message);
+        console.warn(`파일 삭제 실패: ${f}`, err.message);
       }
     }
   });
@@ -54,12 +54,13 @@ files.forEach(f => {
       fs.copyFileSync(srcPath, destPath);
     }
   } catch (err) {
-    console.error(`❌ 파일 복사 실패: ${f}`, err.message);
+    console.error(`파일 복사 실패: ${f}`, err.message);
     process.exit(1);
   }
 });
 
-console.log('✅ 빌드된 파일이 static 폴더로 복사되었습니다!');
+console.log('빌드된 파일이 static 폴더로 복사되었습니다!');
+
 
 
 

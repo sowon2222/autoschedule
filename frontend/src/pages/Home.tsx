@@ -61,8 +61,9 @@ export default function Home() {
   const [taskFormData, setTaskFormData] = useState({
     teamId: '',
     title: '',
-    startAt: '',
-    dueAt: '',
+    dueDate: '',
+    dueTime: '18:00',
+    durationMin: 60,
     priority: 3,
     assigneeId: undefined as number | undefined,
     splittable: true,
@@ -929,32 +930,22 @@ export default function Home() {
             
             <form onSubmit={async (e) => {
               e.preventDefault()
-              if (!taskFormData.teamId || !taskFormData.title || !taskFormData.dueAt) {
+              if (!taskFormData.teamId || !taskFormData.title || !taskFormData.dueDate) {
                 alert('팀, 제목, 마감일은 필수입니다.')
                 return
               }
               
               try {
-                // 시작 시간과 마감 시간을 기반으로 durationMin 계산
-                let durationMin = 60 // 기본값
-                if (taskFormData.startAt && taskFormData.dueAt) {
-                  const start = new Date(taskFormData.startAt)
-                  const end = new Date(taskFormData.dueAt)
-                  if (end > start) {
-                    durationMin = Math.round((end.getTime() - start.getTime()) / (1000 * 60))
-                  } else {
-                    alert('마감 시간은 시작 시간보다 늦어야 합니다.')
-                    return
-                  }
-                } else if (taskFormData.dueAt) {
-                  durationMin = 60
-                }
+                // 날짜와 시간을 합쳐서 ISO 문자열 생성
+                const dueAt = taskFormData.dueDate && taskFormData.dueTime
+                  ? new Date(`${taskFormData.dueDate}T${taskFormData.dueTime}`).toISOString()
+                  : null
                 
                 const payload: any = {
                   teamId: Number(taskFormData.teamId),
                   title: taskFormData.title,
-                  durationMin: durationMin,
-                  dueAt: taskFormData.dueAt ? new Date(taskFormData.dueAt).toISOString() : null,
+                  durationMin: taskFormData.durationMin,
+                  dueAt: dueAt,
                   priority: taskFormData.priority,
                   assigneeId: taskFormData.assigneeId || null,
                   splittable: taskFormData.splittable,
@@ -970,11 +961,14 @@ export default function Home() {
                 
                 await api.post('/api/tasks', payload)
                 setCreateTaskModalOpen(false)
+                const tomorrow = new Date()
+                tomorrow.setDate(tomorrow.getDate() + 1)
                 setTaskFormData({
                   teamId: '',
                   title: '',
-                  startAt: '',
-                  dueAt: '',
+                  dueDate: '',
+                  dueTime: '18:00',
+                  durationMin: 60,
                   priority: 3,
                   assigneeId: undefined,
                   splittable: true,
@@ -1034,26 +1028,88 @@ export default function Home() {
                 />
               </div>
               
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">시작 날짜/시간</label>
-                  <input
-                    type="datetime-local"
-                    value={taskFormData.startAt}
-                    onChange={(e) => setTaskFormData({ ...taskFormData, startAt: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">마감 날짜 *</label>
+                <div className="flex gap-2 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const today = new Date().toISOString().split('T')[0]
+                      setTaskFormData({ ...taskFormData, dueDate: today })
+                    }}
+                    className="px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                  >
+                    오늘
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const tomorrow = new Date()
+                      tomorrow.setDate(tomorrow.getDate() + 1)
+                      setTaskFormData({ ...taskFormData, dueDate: tomorrow.toISOString().split('T')[0] })
+                    }}
+                    className="px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                  >
+                    내일
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextWeek = new Date()
+                      nextWeek.setDate(nextWeek.getDate() + 7)
+                      setTaskFormData({ ...taskFormData, dueDate: nextWeek.toISOString().split('T')[0] })
+                    }}
+                    className="px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                  >
+                    1주일 후
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextMonth = new Date()
+                      nextMonth.setMonth(nextMonth.getMonth() + 1)
+                      setTaskFormData({ ...taskFormData, dueDate: nextMonth.toISOString().split('T')[0] })
+                    }}
+                    className="px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                  >
+                    1개월 후
+                  </button>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">마감 날짜/시간 *</label>
+                <div className="grid grid-cols-2 gap-4">
                   <input
-                    type="datetime-local"
-                    value={taskFormData.dueAt}
-                    onChange={(e) => setTaskFormData({ ...taskFormData, dueAt: e.target.value })}
+                    type="date"
+                    value={taskFormData.dueDate}
+                    onChange={(e) => setTaskFormData({ ...taskFormData, dueDate: e.target.value })}
                     required
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
+                  <select
+                    value={taskFormData.dueTime}
+                    onChange={(e) => setTaskFormData({ ...taskFormData, dueTime: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {Array.from({ length: 24 }, (_, i) => {
+                      const hour = i.toString().padStart(2, '0')
+                      return (
+                        <option key={i} value={`${hour}:00`}>{hour}:00</option>
+                      )
+                    })}
+                  </select>
                 </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">소요 시간 (분) *</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={taskFormData.durationMin}
+                  onChange={(e) => setTaskFormData({ ...taskFormData, durationMin: Number(e.target.value) })}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="60"
+                />
+                <p className="text-xs text-gray-500 mt-1">작업에 소요될 예상 시간을 분 단위로 입력하세요</p>
               </div>
               
               <div className="grid grid-cols-2 gap-4">
@@ -1156,8 +1212,9 @@ export default function Home() {
                     setTaskFormData({
                       teamId: '',
                       title: '',
-                      startAt: '',
-                      dueAt: '',
+                      dueDate: '',
+                      dueTime: '18:00',
+                      durationMin: 60,
                       priority: 3,
                       assigneeId: undefined,
                       splittable: true,

@@ -135,23 +135,56 @@ export function createStompClient(config?: Partial<ClientConfig>) {
     ...config,
     webSocketFactory: () => {
       console.log('[WebSocket] Creating SockJS connection to:', url)
-      // iframe/jsonp transport는 제외 (보안상 권장되지 않음, 콘솔 에러 감소)
-      return new SockJS(url, null, {
-        transports: ['websocket', 'xhr-streaming', 'xhr-polling']
+      const sock = new SockJS(url, null, {
+        transports: ['websocket', 'xhr-streaming']
       })
+      
+      // 로컬 개발 환경에서만 상세 로그
+      if (import.meta.env.DEV) {
+        sock.onopen = () => {
+          console.log('[SockJS] Connection opened')
+        }
+        sock.onclose = (event) => {
+          console.warn('[SockJS] Connection closed', { code: event.code, reason: event.reason, wasClean: event.wasClean })
+        }
+        sock.onerror = (error) => {
+          console.error('[SockJS] Connection error', error)
+        }
+        sock.onmessage = (event) => {
+          // 메시지가 너무 많으므로 중요한 것만 로그
+          if (event.data && typeof event.data === 'string' && (event.data.includes('o') || event.data.includes('a'))) {
+            console.debug('[SockJS] Message received', event.data.substring(0, 50))
+          }
+        }
+      }
+      
+      return sock
     },
     reconnectDelay: 5000,
+    heartbeatIncoming: 10000, // 10초마다 heartbeat 수신 대기
+    heartbeatOutgoing: 10000, // 10초마다 heartbeat 전송
     connectHeaders: token ? { Authorization: `Bearer ${token}` } : undefined,
     // config에 debug가 없으면 우리가 정의한 것 사용
     debug: config?.debug ?? debugFn
   })
 
   client.onStompError = (frame) => {
-    console.error('STOMP error', frame.headers['message'], frame.body)
+    console.error('[STOMP] Error:', frame.headers['message'], frame.body)
   }
 
   client.onWebSocketError = (event) => {
-    console.error('WebSocket error', event)
+    console.error('[WebSocket] Error:', event)
+  }
+
+  // 로컬 개발 환경에서만 연결 상태 상세 로그
+  if (import.meta.env.DEV) {
+    client.onConnect = (frame) => {
+      console.log('[STOMP] Connected successfully', frame)
+    }
+    
+    client.onDisconnect = () => {
+      console.warn('[STOMP] Disconnected')
+    }
   }
 
   return client

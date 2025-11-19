@@ -16,8 +16,9 @@ export default function Tasks() {
   const [newTaskIds, setNewTaskIds] = useState<Set<number>>(new Set())
   const [formData, setFormData] = useState({
     title: '',
-    startAt: '',
-    dueAt: '',
+    dueDate: '',
+    dueTime: '18:00',
+    durationMin: 60,
     priority: 3,
     assigneeId: undefined as number | undefined,
     splittable: true,
@@ -148,27 +149,16 @@ export default function Tasks() {
     if (!id) return
 
     try {
-      // 시작 시간과 마감 시간을 기반으로 durationMin 계산
-      let durationMin = 60 // 기본값
-      if (formData.startAt && formData.dueAt) {
-        const start = new Date(formData.startAt)
-        const end = new Date(formData.dueAt)
-        if (end > start) {
-          durationMin = Math.round((end.getTime() - start.getTime()) / (1000 * 60))
-        } else {
-          alert('마감 시간은 시작 시간보다 늦어야 합니다.')
-          return
-        }
-      } else if (formData.dueAt) {
-        // 마감 시간만 있는 경우, 기본 소요 시간 사용
-        durationMin = 60
-      }
+      // 날짜와 시간을 합쳐서 ISO 문자열 생성
+      const dueAt = formData.dueDate && formData.dueTime
+        ? new Date(`${formData.dueDate}T${formData.dueTime}`).toISOString()
+        : null
 
       const payload: any = {
         teamId: Number(id),
         title: formData.title,
-        durationMin: durationMin,
-        dueAt: formData.dueAt ? new Date(formData.dueAt).toISOString() : null,
+        durationMin: formData.durationMin,
+        dueAt: dueAt,
         priority: formData.priority,
         assigneeId: formData.assigneeId || null,
         splittable: formData.splittable,
@@ -186,8 +176,9 @@ export default function Tasks() {
       setModalOpen(false)
       setFormData({
         title: '',
-        startAt: '',
-        dueAt: '',
+        dueDate: '',
+        dueTime: '18:00',
+        durationMin: 60,
         priority: 3,
         assigneeId: undefined,
         splittable: true,
@@ -322,27 +313,88 @@ export default function Tasks() {
                   required
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">시작 날짜/시간 *</label>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">마감 날짜 *</label>
+                <div className="flex gap-2 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const today = new Date().toISOString().split('T')[0]
+                      setFormData({ ...formData, dueDate: today })
+                    }}
+                    className="px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                  >
+                    오늘
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const tomorrow = new Date()
+                      tomorrow.setDate(tomorrow.getDate() + 1)
+                      setFormData({ ...formData, dueDate: tomorrow.toISOString().split('T')[0] })
+                    }}
+                    className="px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                  >
+                    내일
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextWeek = new Date()
+                      nextWeek.setDate(nextWeek.getDate() + 7)
+                      setFormData({ ...formData, dueDate: nextWeek.toISOString().split('T')[0] })
+                    }}
+                    className="px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                  >
+                    1주일 후
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextMonth = new Date()
+                      nextMonth.setMonth(nextMonth.getMonth() + 1)
+                      setFormData({ ...formData, dueDate: nextMonth.toISOString().split('T')[0] })
+                    }}
+                    className="px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                  >
+                    1개월 후
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
                   <input
-                    type="datetime-local"
+                    type="date"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    value={formData.startAt}
-                    onChange={(e) => setFormData({ ...formData, startAt: e.target.value })}
+                    value={formData.dueDate}
+                    onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
                     required
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">마감 날짜/시간 *</label>
-                  <input
-                    type="datetime-local"
+                  <select
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    value={formData.dueAt}
-                    onChange={(e) => setFormData({ ...formData, dueAt: e.target.value })}
-                    required
-                  />
+                    value={formData.dueTime}
+                    onChange={(e) => setFormData({ ...formData, dueTime: e.target.value })}
+                  >
+                    {Array.from({ length: 24 }, (_, i) => {
+                      const hour = i.toString().padStart(2, '0')
+                      return (
+                        <option key={i} value={`${hour}:00`}>{hour}:00</option>
+                      )
+                    })}
+                  </select>
                 </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">소요 시간 (분) *</label>
+                <input
+                  type="number"
+                  min="1"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  value={formData.durationMin}
+                  onChange={(e) => setFormData({ ...formData, durationMin: Number(e.target.value) })}
+                  required
+                  placeholder="60"
+                />
+                <p className="text-xs text-gray-500 mt-1">작업에 소요될 예상 시간을 분 단위로 입력하세요</p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>

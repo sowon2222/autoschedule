@@ -447,9 +447,19 @@ export default function Calendar() {
     try {
       // 팀의 CalendarEvent와 Task를 모두 조회
       const [eventsResponse, tasksResponse] = await Promise.all([
-        api.get(`/api/events/team/${id}`),
-        api.get(`/api/tasks/team/${id}`)
+        api.get(`/api/events/team/${id}`).catch((error) => {
+          console.error('[Calendar] Failed to load events:', error)
+          // 에러가 발생해도 빈 배열 반환하여 계속 진행
+          return { data: [] }
+        }),
+        api.get(`/api/tasks/team/${id}`).catch((error) => {
+          console.error('[Calendar] Failed to load tasks:', error)
+          return { data: [] }
+        })
       ])
+
+      console.log('[Calendar] Loaded events:', eventsResponse.data)
+      console.log('[Calendar] Loaded tasks:', tasksResponse.data)
 
       const calendarEvents: CalendarEvent[] = []
       
@@ -458,48 +468,71 @@ export default function Calendar() {
       setTeamBaseColor(baseColor)
 
       // CalendarEvent 변환
-      eventsResponse.data.forEach((event: Event) => {
-        calendarEvents.push({
-          id: `event-${event.id}`,
-          title: event.title,
-          start: event.startsAt,
-          end: event.endsAt,
-          backgroundColor: '#22c55e',
-          borderColor: '#16a34a',
-          editable: true,
-          durationEditable: true,
-          extendedProps: {
-            type: 'event',
-            location: event.location
+      if (eventsResponse.data && Array.isArray(eventsResponse.data)) {
+        eventsResponse.data.forEach((event: Event) => {
+          if (event && event.startsAt && event.endsAt) {
+            // 날짜 유효성 검사
+            const startDate = new Date(event.startsAt)
+            const endDate = new Date(event.endsAt)
+            
+            if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+              console.warn('[Calendar] Invalid date for event:', event)
+              return
+            }
+            
+            calendarEvents.push({
+              id: `event-${event.id}`,
+              title: event.title,
+              start: startDate.toISOString(),
+              end: endDate.toISOString(),
+              backgroundColor: '#22c55e',
+              borderColor: '#16a34a',
+              editable: true,
+              durationEditable: true,
+              extendedProps: {
+                type: 'event',
+                location: event.location
+              }
+            })
+          } else {
+            console.warn('[Calendar] Event missing required fields:', event)
           }
         })
-      })
+      } else {
+        console.warn('[Calendar] Events response is not an array:', eventsResponse.data)
+      }
+      
+      console.log('[Calendar] Converted calendar events:', calendarEvents.length, 'items')
 
       // Task 변환 (마감일이 있는 경우만)
-      tasksResponse.data.forEach((task: Task) => {
-        if (task.dueAt) {
-          const startDate = new Date(task.dueAt)
-          const endDate = new Date(startDate.getTime() + task.durationMin * 60 * 1000)
-          
-          const priority = task.priority || 3
-          const colors = getColorByPriority(baseColor, priority)
-          
-          calendarEvents.push({
-            id: `task-${task.id}`,
-            title: `📋 ${task.title}`,
-            start: startDate.toISOString(),
-            end: endDate.toISOString(),
-            backgroundColor: colors.bg,
-            borderColor: colors.border,
-            editable: true,
-            durationEditable: true,
-            extendedProps: {
-              type: 'task',
-              priority: task.priority
+      if (tasksResponse.data && Array.isArray(tasksResponse.data)) {
+        tasksResponse.data.forEach((task: Task) => {
+          if (task && task.dueAt) {
+            const startDate = new Date(task.dueAt)
+            if (!isNaN(startDate.getTime())) {
+              const endDate = new Date(startDate.getTime() + (task.durationMin || 60) * 60 * 1000)
+              
+              const priority = task.priority || 3
+              const colors = getColorByPriority(baseColor, priority)
+              
+              calendarEvents.push({
+                id: `task-${task.id}`,
+                title: `📋 ${task.title}`,
+                start: startDate.toISOString(),
+                end: endDate.toISOString(),
+                backgroundColor: colors.bg,
+                borderColor: colors.border,
+                editable: true,
+                durationEditable: true,
+                extendedProps: {
+                  type: 'task',
+                  priority: task.priority
+                }
+              })
             }
-          })
-        }
-      })
+          }
+        })
+      }
 
       setEvents(calendarEvents)
     } catch (error) {
