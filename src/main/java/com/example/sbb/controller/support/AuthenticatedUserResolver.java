@@ -1,5 +1,6 @@
 package com.example.sbb.controller.support;
 
+import java.util.Optional;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -22,6 +23,25 @@ public final class AuthenticatedUserResolver {
             return userId;
         }
         throw new AccessDeniedException("지원하지 않는 인증 정보입니다.");
+    }
+
+    /**
+     * 인증된 사용자 ID를 Optional로 반환 (인증되지 않은 경우 빈 Optional)
+     */
+    public static Optional<Long> getUserId() {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null || authentication.getPrincipal() == null) {
+                return Optional.empty();
+            }
+            Object principal = authentication.getPrincipal();
+            if (principal instanceof Long userId) {
+                return Optional.of(userId);
+            }
+            return Optional.empty();
+        } catch (Exception e) {
+            return Optional.empty();
+        }
     }
 }
 
