@@ -10,7 +10,7 @@ import api from '../lib/api'
 import { useAuth } from '../store/auth'
 import type { StompSubscription } from '@stomp/stompjs'
 import { createStompClient, safeJsonParse } from '../lib/ws'
-import type { CollaborationNotificationMessage, TaskEventMessage } from '../lib/ws'
+import type { CollaborationNotificationMessage, TaskEventMessage, CalendarEventMessage } from '../lib/ws'
 import CalendarEventModal from '../components/CalendarEventModal'
 import CreateEventModal from '../components/CreateEventModal'
 
@@ -214,28 +214,40 @@ export default function Home() {
         teamColorMap.set(team.id, getTeamColor(team.id))
       })
 
-      // 사용자의 CalendarEvent와 담당자 Task, 각 팀의 Task를 모두 조회
+      // 사용자의 CalendarEvent와 담당자 Task, 각 팀의 Task와 Event를 모두 조회
       const [eventsResponse, assigneeTasksResponse] = await Promise.all([
         api.get(`/api/events/user/${userId}`).catch(() => ({ data: [] })),
         api.get(`/api/tasks/assignee/${userId}`).catch(() => ({ data: [] }))
       ])
 
-      // 각 팀의 Task 조회
+      // 각 팀의 Task와 Event 조회
       const taskPromises = teams.map((team: any) =>
         api.get(`/api/tasks/team/${team.id}`).catch(() => ({ data: [] }))
       )
-      const tasksResponses = await Promise.all(taskPromises)
+      const eventPromises = teams.map((team: any) =>
+        api.get(`/api/events/team/${team.id}`).catch(() => ({ data: [] }))
+      )
+      const [tasksResponses, eventsResponses] = await Promise.all([
+        Promise.all(taskPromises),
+        Promise.all(eventPromises)
+      ])
       
       console.log('Assignee tasks:', assigneeTasksResponse.data)
       console.log('Team tasks responses:', tasksResponses)
+      console.log('Team events responses:', eventsResponses)
 
       const calendarEvents: any[] = []
+      const eventIds = new Set<string>() // 중복 제거용
 
-      // CalendarEvent 변환
+      // 사용자 소유 CalendarEvent 변환
       if (eventsResponse.data && Array.isArray(eventsResponse.data)) {
         eventsResponse.data.forEach((event: any) => {
+          const eventId = `event-${event.id}`
+          if (eventIds.has(eventId)) return
+          eventIds.add(eventId)
+          
           calendarEvents.push({
-            id: `event-${event.id}`,
+            id: eventId,
             title: event.title,
             start: event.startsAt,
             end: event.endsAt,
@@ -243,10 +255,44 @@ export default function Home() {
             teamName: event.teamName,
             source: event.source as 'TASK' | 'EVENT' | 'BREAK' | undefined,
             backgroundColor: event.source === 'TASK' ? '#3b82f6' : event.source === 'EVENT' ? '#22c55e' : event.source === 'BREAK' ? '#f97316' : '#22c55e',
-            borderColor: event.source === 'TASK' ? '#2563eb' : event.source === 'EVENT' ? '#16a34a' : event.source === 'BREAK' ? '#ea580c' : '#16a34a'
+            borderColor: event.source === 'TASK' ? '#2563eb' : event.source === 'EVENT' ? '#16a34a' : event.source === 'BREAK' ? '#ea580c' : '#16a34a',
+            extendedProps: {
+              type: 'event',
+              teamId: event.teamId
+            }
           })
         })
       }
+
+      // 각 팀의 CalendarEvent 변환
+      eventsResponses.forEach((eventsResponse: any, teamIndex: number) => {
+        if (eventsResponse.data && Array.isArray(eventsResponse.data)) {
+          const currentTeam = teams[teamIndex]
+          eventsResponse.data.forEach((event: any) => {
+            const eventId = `event-${event.id}`
+            // 중복 제거 (이미 추가된 일정은 제외)
+            if (eventIds.has(eventId)) return
+            eventIds.add(eventId)
+            
+            if (event.startsAt && event.endsAt) {
+              calendarEvents.push({
+                id: eventId,
+                title: event.title,
+                start: event.startsAt,
+                end: event.endsAt,
+                location: event.location,
+                teamName: currentTeam?.name || event.teamName,
+                backgroundColor: '#22c55e',
+                borderColor: '#16a34a',
+                extendedProps: {
+                  type: 'event',
+                  teamId: currentTeam?.id || event.teamId
+                }
+              })
+            }
+          })
+        }
+      })
 
       // 중복 제거를 위한 Set
       const taskIds = new Set<string>()
@@ -401,6 +447,50 @@ export default function Home() {
       }, 10000)
     }
 
+    const upsertCalendarEvent = (message: CalendarEventMessage) => {
+      const eventId = message.event?.id ?? message.eventId
+      if (!eventId) {
+        console.warn('[Home] Calendar event missing eventId:', message)
+        return
+      }
+      const calendarId = `event-${eventId}`
+
+      // 삭제된 일정이거나 일정 정보가 없으면 캘린더에서 제거
+      if (message.action === 'DELETED' || !message.event) {
+        console.log('[Home] Removing calendar event from calendar:', eventId, message.action)
+        setEvents((prev) => prev.filter((entry) => entry.id !== calendarId))
+        return
+      }
+
+      const payload = message.event
+      const teamId = payload.teamId || message.teamId
+
+      const converted: CalendarEventItem = {
+        id: calendarId,
+        title: payload.title,
+        start: payload.startsAt,
+        end: payload.endsAt,
+        location: payload.location ?? undefined,
+        teamName: undefined, // 필요시 추가
+        backgroundColor: '#22c55e',
+        borderColor: '#16a34a',
+        extendedProps: {
+          type: 'event',
+          teamId: teamId ?? undefined
+        }
+      }
+
+      setEvents((prev) => {
+        const index = prev.findIndex((entry) => entry.id === converted.id)
+        if (index >= 0) {
+          const copy = [...prev]
+          copy[index] = converted
+          return copy
+        }
+        return [...prev, converted]
+      })
+    }
+
     const upsertTaskEvent = (message: TaskEventMessage) => {
       const taskId = message.task?.id ?? message.taskId
       if (!taskId) {
@@ -497,6 +587,21 @@ export default function Home() {
             }
             console.log('[Home] Received task event:', payload.action, 'for team:', team.id)
             upsertTaskEvent(payload)
+          })
+        )
+      })
+
+      // 각 팀의 일정 이벤트 구독 (캘린더 실시간 업데이트)
+      userTeams.forEach((team) => {
+        subscriptions.push(
+          client.subscribe(`/topic/calendar/${team.id}`, (frame) => {
+            const payload = safeJsonParse<CalendarEventMessage>(frame.body)
+            if (!payload) {
+              console.warn('[Home] Failed to parse calendar event:', frame.body)
+              return
+            }
+            console.log('[Home] Received calendar event:', payload.action, 'for team:', team.id)
+            upsertCalendarEvent(payload)
           })
         )
       })
