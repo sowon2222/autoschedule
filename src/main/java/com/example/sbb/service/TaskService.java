@@ -11,6 +11,7 @@ import com.example.sbb.dto.response.TaskResponse;
 import com.example.sbb.repository.TaskRepository;
 import com.example.sbb.repository.TeamRepository;
 import com.example.sbb.repository.UserRepository;
+import java.time.LocalDate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,15 +27,18 @@ public class TaskService {
     private final TeamRepository teamRepository;
     private final UserRepository userRepository;
     private final CollaborationEventPublisher eventPublisher;
+    private final SchedulingService schedulingService;
 
     public TaskService(TaskRepository taskRepository,
                        TeamRepository teamRepository,
                        UserRepository userRepository,
-                       CollaborationEventPublisher eventPublisher) {
+                       CollaborationEventPublisher eventPublisher,
+                       SchedulingService schedulingService) {
         this.taskRepository = taskRepository;
         this.teamRepository = teamRepository;
         this.userRepository = userRepository;
         this.eventPublisher = eventPublisher;
+        this.schedulingService = schedulingService;
     }
 
     @Transactional
@@ -90,6 +94,10 @@ public class TaskService {
         TaskEventMessage message = TaskEventMessage.created(response);
         eventPublisher.publishTaskEvent(message);
         publishTaskCreatedNotification(task);
+        
+        // 작업 생성 후 자동 스케줄 재생성
+        triggerScheduleRegeneration(saved.getTeam().getId(), saved.getDueAt());
+        
         return response;
     }
 
@@ -145,6 +153,10 @@ public class TaskService {
         TaskEventMessage message = TaskEventMessage.updated(response);
         eventPublisher.publishTaskEvent(message);
         publishTaskUpdatedNotification(task, previousAssigneeId);
+        
+        // 작업 수정 후 자동 스케줄 재생성
+        triggerScheduleRegeneration(saved.getTeam().getId(), saved.getDueAt());
+        
         return response;
     }
 
@@ -152,8 +164,10 @@ public class TaskService {
     public void deleteTask(Long id) {
         Task task = taskRepository.findById(id)
             .orElseThrow(() -> new IllegalArgumentException("작업을 찾을 수 없습니다: " + id));
-        taskRepository.delete(task);
         Long teamId = task.getTeam() != null ? task.getTeam().getId() : null;
+        OffsetDateTime dueAt = task.getDueAt();
+        
+        taskRepository.delete(task);
         eventPublisher.publishTaskEvent(TaskEventMessage.deleted(id, teamId));
         if (teamId != null) {
             eventPublisher.publishNotification(
@@ -163,6 +177,9 @@ public class TaskService {
                     "작업 삭제",
                     "작업 '" + task.getTitle() + "' 이(가) 삭제되었습니다.")
             );
+            
+            // 작업 삭제 후 자동 스케줄 재생성
+            triggerScheduleRegeneration(teamId, dueAt);
         }
     }
 
@@ -295,9 +312,63 @@ public class TaskService {
                     "새 반복 작업 생성",
                     "반복 작업 '" + template.getTitle() + "' " + count + "개가 생성되었습니다.")
             );
+            
+            // 반복 작업 생성 후 자동 스케줄 재생성
+            triggerScheduleRegeneration(template.getTeam().getId(), template.getDueAt());
         }
         
         return response;
+    }
+    
+    /**
+     * 작업 변경 후 자동 스케줄 재생성 트리거
+     * 작업의 마감일을 기준으로 적절한 범위의 스케줄을 재생성합니다.
+     */
+    private void triggerScheduleRegeneration(Long teamId, OffsetDateTime taskDueAt) {
+        if (teamId == null) {
+            return;
+        }
+        
+        try {
+            // 팀의 모든 작업을 조회하여 마감일 범위 계산
+            List<Task> allTasks = taskRepository.findByTeamIdAndDueAtBetween(
+                teamId,
+                OffsetDateTime.now().minusDays(7), // 최근 7일 전부터
+                OffsetDateTime.now().plusDays(90)  // 90일 후까지
+            );
+            
+            if (allTasks.isEmpty()) {
+                return; // 작업이 없으면 스케줄 생성 안 함
+            }
+            
+            // 작업들의 마감일 범위 계산
+            LocalDate minDate = allTasks.stream()
+                .filter(t -> t.getDueAt() != null)
+                .map(t -> t.getDueAt().toLocalDate())
+                .min(LocalDate::compareTo)
+                .orElse(LocalDate.now());
+            
+            LocalDate maxDate = allTasks.stream()
+                .filter(t -> t.getDueAt() != null)
+                .map(t -> t.getDueAt().toLocalDate())
+                .max(LocalDate::compareTo)
+                .orElse(LocalDate.now().plusDays(30));
+            
+            // 범위 확장 (시작일은 일주일 전, 종료일은 일주일 후)
+            LocalDate rangeStart = minDate.minusDays(7);
+            LocalDate rangeEnd = maxDate.plusDays(7);
+            
+            // 현재 사용자 ID 가져오기 (없으면 null)
+            Long userId = com.example.sbb.controller.support.AuthenticatedUserResolver.getUserId().orElse(null);
+            
+            // 비동기로 스케줄 재생성
+            schedulingService.generateSchedule(teamId, rangeStart, rangeEnd, userId);
+            
+        } catch (Exception e) {
+            // 스케줄 재생성 실패는 로그만 남기고 작업 자체는 성공 처리
+            org.slf4j.LoggerFactory.getLogger(TaskService.class)
+                .warn("작업 변경 후 스케줄 재생성 실패: teamId={}", teamId, e);
+        }
     }
 }
 

@@ -79,6 +79,17 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
         WHERE t.assignee.id = :assigneeId
     """)
     List<TaskResponse> findResponsesByAssigneeId(@Param("assigneeId") Long assigneeId);
+    
+    // 스케줄링용: 팀의 작업들을 마감일 범위로 조회
+    @Query("""
+        SELECT t FROM Task t
+        WHERE t.team.id = :teamId
+        AND (t.dueAt IS NULL OR t.dueAt BETWEEN :start AND :end)
+        ORDER BY t.dueAt ASC NULLS LAST, t.priority DESC
+    """)
+    List<Task> findByTeamIdAndDueAtBetween(@Param("teamId") Long teamId,
+                                             @Param("start") java.time.OffsetDateTime start,
+                                             @Param("end") java.time.OffsetDateTime end);
 }
 
 
