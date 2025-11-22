@@ -541,6 +541,28 @@ export default function CalendarEventModal({ isOpen, onClose, eventId, onUpdate 
               >
                 닫기
               </button>
+              {isTask && id && (
+                <button
+                  onClick={async () => {
+                    if (confirm(`작업 "${taskData?.title}"을(를) 삭제하시겠습니까?`)) {
+                      try {
+                        setSaving(true)
+                        setError('')
+                        await api.delete(`/api/tasks/${id}`)
+                        if (onUpdate) onUpdate()
+                        onClose()
+                      } catch (err: any) {
+                        setError(err.response?.data?.message || '작업 삭제에 실패했습니다.')
+                        setSaving(false)
+                      }
+                    }
+                  }}
+                  disabled={saving}
+                  className="px-4 py-2 text-white bg-red-600 rounded-md hover:bg-red-700 disabled:bg-red-400 disabled:cursor-not-allowed transition"
+                >
+                  {saving ? '삭제 중...' : '삭제'}
+                </button>
+              )}
               <button
                 onClick={() => setIsEditMode(true)}
                 className="px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 transition"

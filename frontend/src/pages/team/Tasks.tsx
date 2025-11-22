@@ -240,12 +240,13 @@ export default function Tasks() {
                 <th className="p-3 text-left font-bold text-gray-700 border-b border-gray-200">소요시간(분)</th>
                 <th className="p-3 text-left font-bold text-gray-700 border-b border-gray-200">마감</th>
                 <th className="p-3 text-left font-bold text-gray-700 border-b border-gray-200">우선순위</th>
+                <th className="p-3 text-left font-bold text-gray-700 border-b border-gray-200">작업</th>
               </tr>
             </thead>
             <tbody>
               {list.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="p-8 text-center text-gray-500 bg-gray-50">
+                  <td colSpan={5} className="p-8 text-center text-gray-500 bg-gray-50">
                     작업이 없습니다
                   </td>
                 </tr>
@@ -279,6 +280,23 @@ export default function Tasks() {
                       }`}>
                         {t.priority}
                       </span>
+                    </td>
+                    <td className="p-3 border-b border-gray-100">
+                      <button
+                        onClick={async () => {
+                          if (confirm(`작업 "${t.title}"을(를) 삭제하시겠습니까?`)) {
+                            try {
+                              await api.delete(`/api/tasks/${t.id}`)
+                              loadTasks()
+                            } catch (error: any) {
+                              alert(error.response?.data?.message || '작업 삭제에 실패했습니다.')
+                            }
+                          }
+                        }}
+                        className="px-3 py-1.5 text-sm text-white bg-red-600 rounded-md hover:bg-red-700 transition-colors"
+                      >
+                        삭제
+                      </button>
                     </td>
                   </tr>
                 ))
