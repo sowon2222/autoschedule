@@ -53,6 +53,11 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, TeamMemb
         WHERE tm.user.id = :userId
     """)
     List<TeamResponse> findTeamResponsesByUserId(@Param("userId") Long userId);
+    
+    /**
+     * 팀 ID로 팀 구성원 엔티티 목록 조회
+     */
+    List<TeamMember> findByTeamId(Long teamId);
 }
 
 
