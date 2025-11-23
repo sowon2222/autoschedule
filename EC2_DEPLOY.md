@@ -10,7 +10,7 @@ EC2 인스턴스에 AutoSchedule을 배포하는 단계별 가이드입니다.
 - [ ] 도메인 (선택사항, IP로도 접속 가능)
 
 **변수 설정 (이 문서에서 사용할 값):**
-- `EC2_IP`: EC2 퍼블릭 IP 주소 (예: `3.106.203.246`)
+- `EC2_IP`: EC2 퍼블릭 IP 주소 (예: `http://54.206.65.33/`)
 - `KEY_PATH`: SSH 키 파일 경로 (예: `C:\Users\sowon\Downloads\autoschedule-keypair.pem`)
 - `DB_PASSWORD`: PostgreSQL 데이터베이스 비밀번호
 
@@ -91,7 +91,7 @@ sudo systemctl enable nginx
 sudo nano /etc/systemd/system/autoschedule.service
 ```
 
-다음 내용 입력 (실제 값으로 변경):
+다음 내용 입력 (실제 값으로 변경): 54.206.65.33
 
 ```ini
 [Unit]

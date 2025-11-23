@@ -11,6 +11,7 @@ import java.time.OffsetDateTime;
 import lombok.Getter;
 import lombok.Setter;
 
+// 슬롯 락 도메인 클래스
 @Entity
 @Table(name = "slot_lock")
 @Getter

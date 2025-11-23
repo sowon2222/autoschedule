@@ -43,3 +43,6 @@ IDE_FIX_*.md
 # Frontend build artifacts
 src/main/resources/static/assets/
 src/main/resources/static/vite.svg
+
+# 원본 assets 폴더 (프로젝트에 포함하지 않음)
+/assets/
