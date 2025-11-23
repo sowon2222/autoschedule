@@ -1,6 +1,5 @@
 package com.example.sbb.service;
 
-import com.example.sbb.domain.Assignment;
 import com.example.sbb.domain.Schedule;
 import com.example.sbb.dto.response.AssignmentResponse;
 import com.example.sbb.dto.response.ScheduleResponse;
@@ -8,7 +7,6 @@ import com.example.sbb.repository.AssignmentRepository;
 import com.example.sbb.repository.ScheduleRepository;
 import com.example.sbb.repository.TeamRepository;
 import com.example.sbb.repository.UserRepository;
-import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -111,33 +109,10 @@ public class ScheduleService {
         
         response.setCreatedAt(schedule.getCreatedAt());
         
-        // Assignment 목록 추가
-        List<Assignment> assignments = assignmentRepository.findByScheduleId(schedule.getId());
-        List<AssignmentResponse> assignmentResponses = assignments.stream()
-            .map(this::toAssignmentResponse)
-            .collect(Collectors.toList());
+        // Assignment 목록 추가 (DTO 프로젝션으로 직접 반환)
+        List<AssignmentResponse> assignmentResponses = assignmentRepository.findByScheduleId(schedule.getId());
         response.setAssignments(assignmentResponses);
         
-        return response;
-    }
-
-    /**
-     * Assignment 엔티티를 AssignmentResponse로 변환
-     */
-    private AssignmentResponse toAssignmentResponse(Assignment assignment) {
-        AssignmentResponse response = new AssignmentResponse();
-        response.setId(assignment.getId());
-        response.setScheduleId(assignment.getSchedule().getId());
-        if (assignment.getTask() != null) {
-            response.setTaskId(assignment.getTask().getId());
-            response.setTaskTitle(assignment.getTask().getTitle());
-        }
-        response.setTitle(assignment.getTitle());
-        response.setStartsAt(assignment.getStartsAt());
-        response.setEndsAt(assignment.getEndsAt());
-        response.setSource(assignment.getSource());
-        response.setSlotIndex(assignment.getSlotIndex());
-        response.setMeta(assignment.getMeta());
         return response;
     }
 }

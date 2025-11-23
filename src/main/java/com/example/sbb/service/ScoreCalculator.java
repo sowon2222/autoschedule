@@ -23,9 +23,11 @@ public class ScoreCalculator {
     
     // Soft 제약 가중치
     private static final int DEADLINE_PENALTY_WEIGHT = 50;      // 마감일 임박도
+    private static final int PRIORITY_WEIGHT = 20;               // 우선순위 가중치 (1=매우 중요 +20, 3=기본 0, 5=낮음 -10)
     private static final int PRIORITY_PENALTY_WEIGHT = 30;     // 우선순위 반영도
     private static final int SPLIT_PENALTY_WEIGHT = 20;         // 작업 분할 횟수
     private static final int CONTINUITY_BONUS_WEIGHT = 10;     // 연속성 보너스
+    private static final int PREFERENCE_PENALTY_WEIGHT = 15;   // 선호도 감점
 
     /**
      * 스케줄의 점수를 계산합니다.
@@ -49,16 +51,22 @@ public class ScoreCalculator {
         // Soft 제약 기반 점수 계산
         int score = BASE_SCORE;
         
-        // 1. 마감일 임박도 감점
+        // 1. 우선순위 기반 점수 (가중치 적용)
+        score += calculatePriorityScore(assignments, tasks);
+        
+        // 2. 마감일 임박도 감점
         score -= calculateDeadlinePenalty(assignments, tasks);
         
-        // 2. 우선순위 반영도 감점
+        // 3. 우선순위 반영도 감점
         score -= calculatePriorityPenalty(assignments, tasks);
         
-        // 3. 작업 분할 횟수 감점
+        // 4. 작업 분할 횟수 감점
         score -= calculateSplitPenalty(assignments, tasks);
         
-        // 4. 연속성 보너스 가점
+        // 5. 선호도 감점
+        score -= calculatePreferencePenalty(assignments, availableSlots);
+        
+        // 6. 연속성 보너스 가점
         score += calculateContinuityBonus(assignments, tasks);
         
         // 최소 점수는 0
@@ -103,13 +111,46 @@ public class ScoreCalculator {
             if (userId != null) {
                 List<TimeSlot> userSlots = availableSlots.get(userId);
                 if (userSlots != null) {
+                    // Assignment가 여러 슬롯에 걸쳐 있을 수 있으므로, 시작 시간과 종료 시간이 포함되는 슬롯들을 찾음
                     boolean inAvailableSlot = userSlots.stream()
-                        .anyMatch(slot -> slot.getStartTime().equals(assignment.getStartsAt()) &&
-                                         slot.getEndTime().equals(assignment.getEndsAt()));
+                        .anyMatch(slot -> {
+                            // 슬롯이 Assignment의 시간 범위와 겹치는지 확인
+                            boolean startsWithin = !assignment.getStartsAt().isBefore(slot.getStartTime()) &&
+                                                   !assignment.getStartsAt().isAfter(slot.getEndTime());
+                            boolean endsWithin = !assignment.getEndsAt().isBefore(slot.getStartTime()) &&
+                                                !assignment.getEndsAt().isAfter(slot.getEndTime());
+                            // Assignment의 시작 시간이 슬롯 내에 있고, 종료 시간도 슬롯 내에 있어야 함
+                            return (startsWithin || assignment.getStartsAt().equals(slot.getStartTime())) &&
+                                   (endsWithin || assignment.getEndsAt().equals(slot.getEndTime()));
+                        });
+                    
                     if (!inAvailableSlot) {
-                        log.warn("Hard 제약 위반: 작업 {}이 사용 불가능한 슬롯에 배치됨", task.getId());
-                        return false;
+                        // 더 정확한 검사: Assignment가 여러 연속 슬롯으로 구성될 수 있음
+                        boolean spansMultipleSlots = userSlots.stream()
+                            .filter(slot -> !assignment.getStartsAt().isAfter(slot.getEndTime()) &&
+                                           !assignment.getEndsAt().isBefore(slot.getStartTime()))
+                            .count() >= Math.ceil((assignment.getEndsAt().toEpochSecond() - 
+                                                   assignment.getStartsAt().toEpochSecond()) / 1800.0); // 30분 = 1800초
+                        
+                        if (!spansMultipleSlots) {
+                            log.warn("Hard 제약 위반: 작업 {}이 사용 불가능한 슬롯에 배치됨 (userId={}, startsAt={}, endsAt={})", 
+                                task.getId(), userId, assignment.getStartsAt(), assignment.getEndsAt());
+                            return false;
+                        }
                     }
+                } else {
+                    log.warn("Hard 제약 위반: 작업 {}의 userId {}에 대한 사용 가능한 슬롯이 없음", task.getId(), userId);
+                    return false;
+                }
+            } else {
+                // userId를 추출할 수 없는 경우, 모든 사용자의 슬롯을 확인
+                boolean foundInAnyUser = availableSlots.values().stream()
+                    .flatMap(List::stream)
+                    .anyMatch(slot -> slot.getStartTime().equals(assignment.getStartsAt()) &&
+                                     slot.getEndTime().equals(assignment.getEndsAt()));
+                if (!foundInAnyUser) {
+                    log.warn("Hard 제약 위반: 작업 {}이 사용 불가능한 슬롯에 배치됨 (userId 추출 실패)", task.getId());
+                    return false;
                 }
             }
         }
@@ -162,6 +203,38 @@ public class ScoreCalculator {
         return totalPenalty;
     }
 
+    /**
+     * 우선순위 기반 점수 계산
+     * priority=1 → 매우 중요 → +20점
+     * priority=3 → 기본값 → 0점
+     * priority=5 → 중요도 낮음 → -10점
+     */
+    private int calculatePriorityScore(List<Assignment> assignments, List<Task> tasks) {
+        Map<Long, Task> taskMap = tasks.stream()
+            .collect(Collectors.toMap(Task::getId, task -> task));
+        
+        int totalScore = 0;
+        
+        for (Assignment assignment : assignments) {
+            if (assignment.getTask() == null) {
+                continue;
+            }
+            
+            Task task = taskMap.get(assignment.getTask().getId());
+            if (task == null) {
+                continue;
+            }
+            
+            int priority = task.getPriority();
+            // priority=1 → 5*weight, priority=3 → 3*weight, priority=5 → 1*weight
+            // 점수: priority=1 → +20, priority=2 → +10, priority=3 → 0, priority=4 → -5, priority=5 → -10
+            double priorityScore = (6 - priority) * PRIORITY_WEIGHT;
+            totalScore += (int) priorityScore;
+        }
+        
+        return totalScore;
+    }
+    
     /**
      * 우선순위 반영도 감점 계산
      * 높은 우선순위 작업이 늦게 배치되면 감점
@@ -245,6 +318,47 @@ public class ScoreCalculator {
     }
 
     /**
+     * 선호도 감점 계산
+     * 낮은 선호도 시간대에 작업이 배치되면 감점
+     */
+    private int calculatePreferencePenalty(
+            List<Assignment> assignments,
+            Map<Long, List<TimeSlot>> availableSlots) {
+        
+        int totalPenalty = 0;
+        
+        for (Assignment assignment : assignments) {
+            if (assignment.getTask() == null) {
+                continue;
+            }
+            
+            Long userId = extractUserIdFromMeta(assignment);
+            if (userId == null) {
+                continue;
+            }
+            
+            List<TimeSlot> userSlots = availableSlots.get(userId);
+            if (userSlots == null) {
+                continue;
+            }
+            
+            // Assignment의 시작 시간과 일치하는 슬롯 찾기
+            TimeSlot matchingSlot = userSlots.stream()
+                .filter(slot -> slot.getStartTime().equals(assignment.getStartsAt()))
+                .findFirst()
+                .orElse(null);
+            
+            if (matchingSlot != null) {
+                // 선호도 점수가 낮을수록 감점 (1.0 - preferenceScore)
+                double penalty = (1.0 - matchingSlot.getPreferenceScore()) * PREFERENCE_PENALTY_WEIGHT;
+                totalPenalty += (int) penalty;
+            }
+        }
+        
+        return totalPenalty;
+    }
+
+    /**
      * 연속성 보너스 계산
      * 같은 작업이 연속된 시간에 배치되면 가점
      */
@@ -296,21 +410,21 @@ public class ScoreCalculator {
         }
         
         try {
-            // 간단한 JSON 파싱 ({"slots":3,"split":false,"userId":1})
             String meta = assignment.getMeta();
-            int userIdIndex = meta.indexOf("\"userId\":");
-            if (userIdIndex == -1) {
-                return null;
+            // JSONB에서 읽어온 문자열이 이스케이프되어 있을 수 있으므로 처리
+            // 예: "{\"userId\":3}" -> {"userId":3}
+            if (meta.startsWith("\"") && meta.endsWith("\"")) {
+                meta = meta.substring(1, meta.length() - 1).replace("\\\"", "\"");
             }
             
-            int start = userIdIndex + 9; // "userId": 길이
-            int end = meta.indexOf("}", start);
-            if (end == -1) {
-                end = meta.length();
+            // 정규식으로 userId 값 추출
+            java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("\"userId\"\\s*:\\s*(\\d+)");
+            java.util.regex.Matcher matcher = pattern.matcher(meta);
+            if (matcher.find()) {
+                return Long.parseLong(matcher.group(1));
             }
             
-            String userIdStr = meta.substring(start, end).trim().replace(",", "").replace("}", "");
-            return Long.parseLong(userIdStr);
+            return null;
         } catch (Exception e) {
             log.warn("meta에서 userId 추출 실패: {}", assignment.getMeta(), e);
             return null;

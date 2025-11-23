@@ -2,9 +2,12 @@ package com.example.sbb.controller;
 
 import com.example.sbb.controller.support.AuthenticatedUserResolver;
 import com.example.sbb.dto.request.ScheduleCreateRequest;
+import com.example.sbb.dto.response.ScheduleGenerateResponse;
 import com.example.sbb.dto.response.ScheduleResponse;
 import com.example.sbb.service.ScheduleService;
 import com.example.sbb.service.SchedulingService;
+import com.example.sbb.service.SlotLockService;
+import java.time.Duration;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -23,30 +26,48 @@ public class ScheduleController {
 
     private final SchedulingService schedulingService;
     private final ScheduleService scheduleService;
+    private final SlotLockService slotLockService;
+    private static final Duration SCHEDULE_LOCK_TTL = Duration.ofSeconds(30);
 
-    public ScheduleController(SchedulingService schedulingService, ScheduleService scheduleService) {
+    public ScheduleController(
+            SchedulingService schedulingService, 
+            ScheduleService scheduleService,
+            SlotLockService slotLockService) {
         this.schedulingService = schedulingService;
         this.scheduleService = scheduleService;
+        this.slotLockService = slotLockService;
     }
 
     @PostMapping("/generate")
-    @Operation(summary = "스케줄 생성", description = "자동 스케줄링 알고리즘으로 스케줄을 생성합니다. 비동기로 실행되며 진행률은 WebSocket으로 전송됩니다.")
+    @Operation(summary = "스케줄 생성", description = "자동 스케줄링 알고리즘으로 스케줄을 생성합니다. FullCalendar 형식으로 반환됩니다.")
     @ApiResponses({
-        @ApiResponse(responseCode = "202", description = "스케줄 생성 요청 수락 (비동기 처리)"),
-        @ApiResponse(responseCode = "400", description = "요청 검증 실패")
+        @ApiResponse(responseCode = "200", description = "스케줄 생성 성공"),
+        @ApiResponse(responseCode = "400", description = "요청 검증 실패"),
+        @ApiResponse(responseCode = "423", description = "다른 사용자가 스케줄을 생성 중입니다")
     })
-    public ResponseEntity<Void> generateSchedule(@Valid @RequestBody ScheduleCreateRequest request) {
+    public ResponseEntity<ScheduleGenerateResponse> generateSchedule(@Valid @RequestBody ScheduleCreateRequest request) {
         Long userId = AuthenticatedUserResolver.requireUserId();
         
-        // 비동기로 스케줄 생성 시작
-        schedulingService.generateSchedule(
-            request.getTeamId(),
-            request.getRangeStart(),
-            request.getRangeEnd(),
-            userId
-        );
+        // SlotLock 적용
+        String slotKey = "schedule:team:" + request.getTeamId();
+        if (!slotLockService.tryLock(slotKey, userId, SCHEDULE_LOCK_TTL)) {
+            return ResponseEntity.status(HttpStatus.LOCKED)
+                .build(); // 423 Locked
+        }
         
-        return ResponseEntity.status(HttpStatus.ACCEPTED).build();
+        try {
+            // 동기로 스케줄 생성
+            ScheduleGenerateResponse response = schedulingService.generateScheduleSync(
+                request.getTeamId(),
+                request.getRangeStart(),
+                request.getRangeEnd(),
+                userId
+            );
+            
+            return ResponseEntity.ok(response);
+        } finally {
+            slotLockService.releaseLock(slotKey, userId);
+        }
     }
 
     @GetMapping("/{id}")

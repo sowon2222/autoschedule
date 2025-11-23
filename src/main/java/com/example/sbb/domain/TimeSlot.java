@@ -23,6 +23,8 @@ public class TimeSlot {
     private OffsetDateTime endTime;      // 종료 시각
     private boolean available;           // 사용 가능 여부
     private Long userId;                 // 소유자 (근무시간을 가진 사용자)
+    @Builder.Default
+    private double preferenceScore = 1.0; // 선호도 점수 (0.0~1.0, 높을수록 선호)
     
     /**
      * 슬롯 인덱스로부터 시작 시각 계산
