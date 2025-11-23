@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
 import Header from '../components/Header'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
@@ -40,14 +39,16 @@ type TaskItem = {
   id: number
   title: string
   dueAt?: string
+  startsAt?: string  // Assignment의 시작 시간 (있으면 이걸 표시)
+  endsAt?: string    // Assignment의 종료 시간
   priority: number
   teamName?: string
   durationMin: number
+  hasAssignment?: boolean  // Assignment가 있는지 여부
 }
 
 export default function Home() {
   const { user, logout, setUser } = useAuth()
-  const navigate = useNavigate()
   const [events, setEvents] = useState<CalendarEventItem[]>([])
   const [notifications, setNotifications] = useState<ToastItem[]>([])
   const [userTeams, setUserTeams] = useState<Array<{ id: number; name: string }>>([])
@@ -57,7 +58,6 @@ export default function Home() {
   const [createModalDate, setCreateModalDate] = useState<Date | undefined>()
   const [tasks, setTasks] = useState<TaskItem[]>([])
   const [createTaskModalOpen, setCreateTaskModalOpen] = useState(false)
-  const [openNavDropdown, setOpenNavDropdown] = useState<string | null>(null)
   const [taskFormData, setTaskFormData] = useState({
     teamId: '',
     title: '',
@@ -73,6 +73,11 @@ export default function Home() {
     recurrenceEndDate: ''
   })
   const [teamMembers, setTeamMembers] = useState<Array<{ userId: number; userName: string; userEmail: string }>>([])
+  const [isGeneratingSchedule, setIsGeneratingSchedule] = useState(false)
+  const [scheduleScores, setScheduleScores] = useState<Record<number, number | null>>({})
+  const [unassignedTasks, setUnassignedTasks] = useState<Record<number, Array<{ taskId: number; reason: string }>>>({})
+  const [calendarViewMode, setCalendarViewMode] = useState<'events' | 'schedule'>('events') // 'events': 일정 보기, 'schedule': 스케줄 보기
+  const [scheduleEvents, setScheduleEvents] = useState<CalendarEventItem[]>([]) // 스케줄 보기용 이벤트 (Assignment 기반)
 
   // 팀별 색상 팔레트 (기본 색상)
   const teamColors = [
@@ -137,23 +142,212 @@ export default function Home() {
       
       if (teams.length === 0) {
         setTasks([])
+        setScheduleEvents([])
         return
       }
       
-      // 각 팀의 모든 작업 조회 (담당자 여부와 상관없이)
-      const taskPromises = teams.map((team: any) =>
-        api.get(`/api/tasks/team/${team.id}`).catch(() => ({ data: [] }))
-      )
-      const tasksResponses = await Promise.all(taskPromises)
+      // 날짜 범위 설정: 오늘부터 60일 후까지
+      const today = new Date()
+      const startDate = new Date(today)
+      startDate.setHours(0, 0, 0, 0)
+      const endDate = new Date(today)
+      endDate.setDate(endDate.getDate() + 60)
+      endDate.setHours(23, 59, 59, 999)
+      
+      const startParam = startDate.toISOString()
+      const endParam = endDate.toISOString()
+      
+      // 각 팀의 Task와 Assignment를 모두 조회
+      const [taskPromises, assignmentPromises] = await Promise.all([
+        Promise.all(teams.map((team: any) =>
+          api.get(`/api/tasks/team/${team.id}`).catch(() => ({ data: [] }))
+        )),
+        Promise.all(teams.map((team: any) =>
+          api.get(`/api/assignments/team/${team.id}`, {
+            params: {
+              start: startParam,
+              end: endParam
+            }
+          }).catch(() => ({ data: [] }))
+        ))
+      ])
+      
+      // 팀 ID -> 색상 매핑 생성
+      const teamColorMap = new Map<number, string>()
+      teams.forEach((team: any) => {
+        teamColorMap.set(team.id, getTeamColor(team.id))
+      })
+      
+      // Assignment를 수집 (중복 제거를 위해 Assignment ID 사용)
+      const assignmentMap = new Map<number, any>() // Assignment ID -> Assignment
+      const assignmentsByTaskIdForSidebar = new Map<number, Array<{ id: number; startsAt: string; endsAt: string; title?: string }>>()
+      const duplicateCheck = new Set<string>() // 중복 체크용: "taskId-startsAt-endsAt"
+      
+      let totalAssignments = 0
+      let duplicateCount = 0
+      
+      assignmentPromises.forEach((assignmentResponse: any, teamIndex: number) => {
+        if (assignmentResponse.data && Array.isArray(assignmentResponse.data)) {
+          assignmentResponse.data.forEach((assignment: any) => {
+            totalAssignments++
+            
+            // Assignment ID로 중복 제거
+            if (assignment.id && assignment.taskId && assignment.startsAt && assignment.endsAt) {
+              // 추가 중복 체크: taskId + startsAt + endsAt 조합
+              const duplicateKey = `${assignment.taskId}-${assignment.startsAt}-${assignment.endsAt}`
+              
+              if (assignmentMap.has(assignment.id)) {
+                duplicateCount++
+                console.warn(`[Schedule] 중복된 Assignment ID 발견: ${assignment.id}, 팀: ${teams[teamIndex]?.name}`)
+                return
+              }
+              
+              if (duplicateCheck.has(duplicateKey)) {
+                duplicateCount++
+                console.warn(`[Schedule] 중복된 Assignment 시간 조합 발견: taskId=${assignment.taskId}, startsAt=${assignment.startsAt}, endsAt=${assignment.endsAt}`)
+                return
+              }
+              
+              assignmentMap.set(assignment.id, assignment)
+              duplicateCheck.add(duplicateKey)
+              
+              // Task ID로도 매핑 (사이드바용)
+              if (!assignmentsByTaskIdForSidebar.has(assignment.taskId)) {
+                assignmentsByTaskIdForSidebar.set(assignment.taskId, [])
+              }
+              assignmentsByTaskIdForSidebar.get(assignment.taskId)!.push({
+                id: assignment.id,
+                startsAt: assignment.startsAt,
+                endsAt: assignment.endsAt,
+                title: assignment.title
+              })
+            }
+          })
+        }
+      })
+      
+      console.log(`[Schedule] Assignment 수집 완료: 총 ${totalAssignments}개, 중복 제거 후 ${assignmentMap.size}개, 중복 ${duplicateCount}개`)
+      
+      // Task ID별로 Assignment 그룹화 (분할된 작업들을 하나로 합치기)
+      const assignmentsByTaskId = new Map<number, any[]>()
+      assignmentMap.forEach((assignment) => {
+        const taskId = assignment.taskId
+        if (taskId) {
+          if (!assignmentsByTaskId.has(taskId)) {
+            assignmentsByTaskId.set(taskId, [])
+          }
+          assignmentsByTaskId.get(taskId)!.push(assignment)
+        }
+      })
+      
+      // 스케줄 이벤트 생성 (분할된 작업들을 하나의 이벤트로 합침)
+      const scheduleEventList: CalendarEventItem[] = []
+      const eventIdSet = new Set<string>() // FullCalendar 이벤트 ID 중복 체크
+      
+      assignmentsByTaskId.forEach((assignments, taskId) => {
+        // Task 정보 찾기
+        let taskInfo: any = null
+        taskPromises.forEach((tasksResponse: any, teamIndex: number) => {
+          if (tasksResponse.data && Array.isArray(tasksResponse.data)) {
+            const task = tasksResponse.data.find((t: any) => t.id === taskId)
+            if (task) {
+              taskInfo = {
+                ...task,
+                teamName: teams[teamIndex]?.name || task.teamName
+              }
+            }
+          }
+        })
+        
+        if (!taskInfo) return
+        
+        const priority = taskInfo.priority || 3
+        const teamId = taskInfo.teamId
+        const teamBaseColor = teamColorMap.get(teamId) || teamColors[0].base
+        const colors = getColorByPriority(teamBaseColor, priority)
+        
+        // 분할된 작업들을 시간 순서로 정렬
+        const sortedAssignments = assignments.sort((a, b) => {
+          const startA = new Date(a.startsAt).getTime()
+          const startB = new Date(b.startsAt).getTime()
+          return startA - startB
+        })
+        
+        // 분할된 작업이 여러 개인 경우: 가장 빠른 시작 시간과 가장 늦은 종료 시간으로 하나의 이벤트 생성
+        if (sortedAssignments.length > 1) {
+          const firstAssignment = sortedAssignments[0]
+          const lastAssignment = sortedAssignments[sortedAssignments.length - 1]
+          
+          const eventId = `schedule-task-${taskId}` // Task ID를 사용하여 분할된 작업들을 하나로 합침
+          
+          if (eventIdSet.has(eventId)) {
+            console.warn(`[Schedule] 중복된 이벤트 ID 발견: ${eventId}`)
+            return
+          }
+          eventIdSet.add(eventId)
+          
+          // 분할된 작업의 제목에서 "(부분 N)" 제거
+          const baseTitle = taskInfo.title
+          const title = `${baseTitle} (${sortedAssignments.length}개 부분)`
+          
+          scheduleEventList.push({
+            id: eventId,
+            title: title,
+            start: firstAssignment.startsAt,
+            end: lastAssignment.endsAt,
+            backgroundColor: colors.bg,
+            borderColor: colors.border,
+            extendedProps: {
+              type: 'task',
+              priority: priority,
+              teamId: teamId
+            }
+          })
+        } else {
+          // 분할되지 않은 작업: 단일 Assignment
+          const assignment = sortedAssignments[0]
+          const eventId = `schedule-${assignment.id}`
+          
+          if (eventIdSet.has(eventId)) {
+            console.warn(`[Schedule] 중복된 이벤트 ID 발견: ${eventId}`)
+            return
+          }
+          eventIdSet.add(eventId)
+          
+          scheduleEventList.push({
+            id: eventId,
+            title: assignment.title || taskInfo.title,
+            start: assignment.startsAt,
+            end: assignment.endsAt,
+            backgroundColor: colors.bg,
+            borderColor: colors.border,
+            extendedProps: {
+              type: 'task',
+              priority: priority,
+              teamId: teamId
+            }
+          })
+        }
+      })
+      
+      console.log(`[Schedule] 스케줄 이벤트 생성 완료: ${scheduleEventList.length}개 (분할된 작업 포함)`)
+      setScheduleEvents(scheduleEventList)
       
       // 모든 팀의 작업을 하나의 배열로 합치기
       const allTasks: any[] = []
-      tasksResponses.forEach((tasksResponse: any, index: number) => {
+      taskPromises.forEach((tasksResponse: any, index: number) => {
         if (tasksResponse.data && Array.isArray(tasksResponse.data)) {
           tasksResponse.data.forEach((task: any) => {
+            // Assignment 정보 가져오기
+            const assignments = assignmentsByTaskIdForSidebar.get(task.id)
+            const firstAssignment = assignments && assignments.length > 0 ? assignments[0] : null
+            
             allTasks.push({
               ...task,
-              teamName: teams[index]?.name || task.teamName
+              teamName: teams[index]?.name || task.teamName,
+              startsAt: firstAssignment?.startsAt,  // Assignment가 있으면 시작 시간
+              endsAt: firstAssignment?.endsAt,        // Assignment가 있으면 종료 시간
+              hasAssignment: !!firstAssignment        // Assignment 여부
             })
           })
         }
@@ -164,23 +358,29 @@ export default function Home() {
         new Map(allTasks.map(task => [task.id, task])).values()
       )
       
-      // 마감일이 있는 작업만 필터링하고 정렬 (오늘 날짜 우선, 그 다음 날짜순)
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
+      // 마감일이 있거나 Assignment가 있는 작업만 필터링하고 정렬
+      const todayDate = new Date()
+      todayDate.setHours(0, 0, 0, 0)
       
       const sortedTasks = uniqueTasks
-        .filter((task: any) => task.dueAt) // 마감일이 있는 것만
+        .filter((task: any) => task.dueAt || task.hasAssignment) // 마감일이 있거나 Assignment가 있는 것만
         .sort((a: any, b: any) => {
-          const dateA = new Date(a.dueAt)
-          const dateB = new Date(b.dueAt)
-          const isTodayA = dateA.toDateString() === today.toDateString()
-          const isTodayB = dateB.toDateString() === today.toDateString()
+          // Assignment가 있으면 Assignment 시간 기준, 없으면 마감일 기준
+          const dateA = a.hasAssignment && a.startsAt 
+            ? new Date(a.startsAt) 
+            : a.dueAt ? new Date(a.dueAt) : new Date(0)
+          const dateB = b.hasAssignment && b.startsAt 
+            ? new Date(b.startsAt) 
+            : b.dueAt ? new Date(b.dueAt) : new Date(0)
+          
+          const isTodayA = dateA.toDateString() === todayDate.toDateString()
+          const isTodayB = dateB.toDateString() === todayDate.toDateString()
           
           // 오늘 날짜가 우선
           if (isTodayA && !isTodayB) return -1
           if (!isTodayA && isTodayB) return 1
           
-          // 같은 날짜 그룹 내에서는 날짜순 정렬
+          // 같은 날짜 그룹 내에서는 시간순 정렬
           return dateA.getTime() - dateB.getTime()
         })
         .slice(0, 10) // 최대 10개
@@ -188,9 +388,12 @@ export default function Home() {
           id: task.id,
           title: task.title,
           dueAt: task.dueAt,
+          startsAt: task.startsAt,  // Assignment 시작 시간
+          endsAt: task.endsAt,       // Assignment 종료 시간
           priority: task.priority,
           teamName: task.teamName,
-          durationMin: task.durationMin
+          durationMin: task.durationMin,
+          hasAssignment: task.hasAssignment
         }))
       
       setTasks(sortedTasks)
@@ -198,6 +401,71 @@ export default function Home() {
       console.error('작업 목록을 불러오는 중 오류가 발생했습니다.', error)
     }
   }, [])
+
+  const handleGenerateSchedule = async () => {
+    if (userTeams.length === 0) {
+      alert('속한 팀이 없습니다.')
+      return
+    }
+    
+    setIsGeneratingSchedule(true)
+    const newScores: Record<number, number | null> = {}
+    const newUnassignedTasks: Record<number, Array<{ taskId: number; reason: string }>> = {}
+    
+    try {
+      // 오늘부터 30일 후까지 스케줄 생성
+      const today = new Date()
+      const rangeStart = today.toISOString().split('T')[0]
+      const rangeEnd = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+      
+      // 모든 팀에 대해 순차적으로 스케줄 생성
+      for (const team of userTeams) {
+        try {
+          const response = await api.post('/api/schedules/generate', {
+            teamId: team.id,
+            rangeStart,
+            rangeEnd
+          })
+          
+          // 점수 저장
+          if (response.data.score !== null && response.data.score !== undefined) {
+            newScores[team.id] = response.data.score
+          }
+          
+          // 배치되지 않은 작업 저장
+          if (response.data.unassignedTasks && response.data.unassignedTasks.length > 0) {
+            newUnassignedTasks[team.id] = response.data.unassignedTasks
+          } else {
+            newUnassignedTasks[team.id] = []
+          }
+        } catch (error: any) {
+          console.error(`팀 ${team.name} 스케줄 생성 실패:`, error)
+          if (error.response?.status === 423) {
+            alert(`팀 "${team.name}"의 스케줄 생성이 차단되었습니다. 다른 사용자가 생성 중입니다.`)
+          } else {
+            alert(`팀 "${team.name}"의 스케줄 생성에 실패했습니다: ${error.response?.data?.message || error.message}`)
+          }
+          // 실패한 팀은 점수와 배치 실패 작업을 빈 값으로 설정
+          newScores[team.id] = null
+          newUnassignedTasks[team.id] = []
+        }
+      }
+      
+      // 모든 결과를 한 번에 업데이트
+      setScheduleScores(newScores)
+      setUnassignedTasks(newUnassignedTasks)
+      
+      // 작업 목록 새로고침
+      if (user) {
+        await loadUserTasks(user.id)
+      }
+    } catch (error: any) {
+      console.error('스케줄 생성 중 오류:', error)
+      alert('스케줄 생성 중 오류가 발생했습니다: ' + (error.message || '알 수 없는 오류'))
+    } finally {
+      setIsGeneratingSchedule(false)
+    }
+  }
 
   const loadUserEvents = useCallback(async (userId: number) => {
     try {
@@ -520,7 +788,12 @@ export default function Home() {
         return
       }
 
-      const endDate = new Date(dueDate.getTime() + (message.task.durationMin ?? 0) * 60 * 1000)
+      // Assignment가 있으면 Assignment의 시간 사용, 없으면 마감일시 기준으로 역산
+      // TODO: Assignment 정보를 TaskResponse에 포함시키거나 별도 API로 조회
+      const durationMin = message.task.durationMin ?? 60
+      const startDate = new Date(dueDate.getTime() - durationMin * 60 * 1000) // 마감일시 - 소요시간
+      const endDate = dueDate // 마감일시가 종료 시간
+      
       const priority = message.task.priority ?? 3
       const teamId = message.task.teamId
       const teamBaseColor = teamId ? (teamColorMap.get(teamId) || teamColors[0].base) : teamColors[0].base
@@ -529,7 +802,7 @@ export default function Home() {
       const converted: CalendarEventItem = {
         id: calendarId,
         title: `📋 ${message.task.title}`,
-        start: dueDate.toISOString(),
+        start: startDate.toISOString(),
         end: endDate.toISOString(),
         backgroundColor: colors.bg,
         borderColor: colors.border,
@@ -695,7 +968,7 @@ export default function Home() {
           <div className="bg-white rounded-2xl border border-gray-200 shadow-lg overflow-hidden h-full">
             {/* 헤더 */}
             <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between mb-3">
                 <div>
                   <h3 className="text-xl font-bold text-gray-900">해야할 일</h3>
                   <p className="text-sm text-gray-600 mt-1">{tasks.length}개의 작업</p>
@@ -707,6 +980,64 @@ export default function Home() {
                   작업 추가
                 </button>
               </div>
+              {/* 모든 팀 스케줄 생성 버튼 */}
+              {userTeams.length > 0 && (
+                <div className="space-y-2">
+                  <button
+                    onClick={handleGenerateSchedule}
+                    disabled={isGeneratingSchedule}
+                    className="w-full px-3 py-2.5 text-sm bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all shadow-sm hover:shadow-md font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                    {isGeneratingSchedule ? `스케줄 생성 중... (${userTeams.length}개 팀)` : `내 스케줄 생성하기`}
+                  </button>
+                  
+                  {/* 팀별 점수 표시 */}
+                  {Object.keys(scheduleScores).length > 0 && (
+                    <div className="space-y-1">
+                      {userTeams.map((team) => {
+                        const score = scheduleScores[team.id]
+                        if (score === null || score === undefined) return null
+                        return (
+                          <div key={team.id} className="flex items-center justify-between text-xs px-2 py-1 bg-purple-50 rounded">
+                            <span className="text-gray-700 font-medium">{team.name}</span>
+                            <span className="text-purple-700 font-semibold">{score.toLocaleString()}점</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                  
+                  {/* 배치되지 않은 작업 표시 */}
+                  {Object.entries(unassignedTasks).map(([teamId, tasks]) => {
+                    if (tasks.length === 0) return null
+                    const team = userTeams.find(t => t.id === Number(teamId))
+                    return (
+                      <div key={teamId} className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <div className="flex items-center gap-2 mb-1">
+                          <svg className="w-4 h-4 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                          <span className="text-xs font-semibold text-yellow-800">{team?.name}: 배치 실패 ({tasks.length}개)</span>
+                        </div>
+                        <ul className="text-xs text-yellow-700 space-y-0.5">
+                          {tasks.slice(0, 3).map((task) => (
+                            <li key={task.taskId} className="flex items-start gap-1">
+                              <span className="text-yellow-600">•</span>
+                              <span className="truncate">{task.reason}</span>
+                            </li>
+                          ))}
+                          {tasks.length > 3 && (
+                            <li className="text-yellow-600 text-xs">... 외 {tasks.length - 3}개</li>
+                          )}
+                        </ul>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
             
             {/* 작업 목록 */}
@@ -718,7 +1049,9 @@ export default function Home() {
               ) : (
                 <div className="divide-y divide-gray-100">
                   {tasks.map((task) => {
-                    const today = isToday(task.dueAt)
+                    // Assignment가 있으면 Assignment 시간 사용, 없으면 마감일 사용
+                    const displayDate = task.hasAssignment && task.startsAt ? task.startsAt : task.dueAt
+                    const today = isToday(displayDate)
                     return (
                       <div
                         key={task.id}
@@ -736,9 +1069,16 @@ export default function Home() {
                               today ? 'font-semibold' : ''
                             }`}>
                               {task.title}
+                              {task.hasAssignment && (
+                                <span className="ml-2 text-xs text-blue-600 font-normal">(스케줄됨)</span>
+                              )}
                             </h4>
                             <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
-                              <span>{formatDate(task.dueAt)}</span>
+                              <span>
+                                {task.hasAssignment && task.startsAt 
+                                  ? formatDate(task.startsAt) + ' ~ ' + formatDate(task.endsAt)
+                                  : formatDate(task.dueAt)}
+                              </span>
                               {task.teamName && (
                                 <>
                                   <span>•</span>
@@ -782,129 +1122,29 @@ export default function Home() {
                   {user ? `${user?.name}님의 일정` : '일정 캘린더'}
                 </h2>
               </div>
-              {/* TeamSpace 네비게이션 */}
-              <nav className="flex items-center gap-1 text-sm">
-                <div className="relative">
-                  <button
-                    onClick={() => setOpenNavDropdown(openNavDropdown === 'calendar' ? null : 'calendar')}
-                    className="px-4 py-2 rounded-lg font-medium text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-700 transition-all"
-                  >
-                    캘린더
-                  </button>
-                  {openNavDropdown === 'calendar' && (
-                    <div className="absolute right-0 mt-2 w-64 rounded-xl border-2 border-gray-200 bg-white shadow-2xl p-2 z-50">
-                      <div className="max-h-72 overflow-auto">
-                        {userTeams.length === 0 ? (
-                          <div className="px-4 py-3 text-sm text-gray-500 bg-gray-50 rounded-lg">소속된 팀이 없습니다</div>
-                        ) : (
-                          userTeams.map((team) => (
-                            <button
-                              key={team.id}
-                              className="w-full text-left px-4 py-3 rounded-lg hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 text-sm font-medium text-gray-700 hover:text-blue-700 transition-all"
-                              onClick={() => {
-                                setOpenNavDropdown(null)
-                                navigate(`/team/${team.id}/calendar`)
-                              }}
-                            >
-                              {team.name}
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div className="relative">
-                  <button
-                    onClick={() => setOpenNavDropdown(openNavDropdown === 'tasks' ? null : 'tasks')}
-                    className="px-4 py-2 rounded-lg font-medium text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-700 transition-all"
-                  >
-                    작업
-                  </button>
-                  {openNavDropdown === 'tasks' && (
-                    <div className="absolute right-0 mt-2 w-64 rounded-xl border-2 border-gray-200 bg-white shadow-2xl p-2 z-50">
-                      <div className="max-h-72 overflow-auto">
-                        {userTeams.length === 0 ? (
-                          <div className="px-4 py-3 text-sm text-gray-500 bg-gray-50 rounded-lg">소속된 팀이 없습니다</div>
-                        ) : (
-                          userTeams.map((team) => (
-                            <button
-                              key={team.id}
-                              className="w-full text-left px-4 py-3 rounded-lg hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 text-sm font-medium text-gray-700 hover:text-blue-700 transition-all"
-                              onClick={() => {
-                                setOpenNavDropdown(null)
-                                navigate(`/team/${team.id}/tasks`)
-                              }}
-                            >
-                              {team.name}
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div className="relative">
-                  <button
-                    onClick={() => setOpenNavDropdown(openNavDropdown === 'workhours' ? null : 'workhours')}
-                    className="px-4 py-2 rounded-lg font-medium text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-700 transition-all"
-                  >
-                    근무시간
-                  </button>
-                  {openNavDropdown === 'workhours' && (
-                    <div className="absolute right-0 mt-2 w-64 rounded-xl border-2 border-gray-200 bg-white shadow-2xl p-2 z-50">
-                      <div className="max-h-72 overflow-auto">
-                        {userTeams.length === 0 ? (
-                          <div className="px-4 py-3 text-sm text-gray-500 bg-gray-50 rounded-lg">소속된 팀이 없습니다</div>
-                        ) : (
-                          userTeams.map((team) => (
-                            <button
-                              key={team.id}
-                              className="w-full text-left px-4 py-3 rounded-lg hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 text-sm font-medium text-gray-700 hover:text-blue-700 transition-all"
-                              onClick={() => {
-                                setOpenNavDropdown(null)
-                                navigate(`/team/${team.id}/workhours`)
-                              }}
-                            >
-                              {team.name}
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div className="relative">
-                  <button
-                    onClick={() => setOpenNavDropdown(openNavDropdown === 'settings' ? null : 'settings')}
-                    className="px-4 py-2 rounded-lg font-medium text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-700 transition-all"
-                  >
-                    팀 설정
-                  </button>
-                  {openNavDropdown === 'settings' && (
-                    <div className="absolute right-0 mt-2 w-64 rounded-xl border-2 border-gray-200 bg-white shadow-2xl p-2 z-50">
-                      <div className="max-h-72 overflow-auto">
-                        {userTeams.length === 0 ? (
-                          <div className="px-4 py-3 text-sm text-gray-500 bg-gray-50 rounded-lg">소속된 팀이 없습니다</div>
-                        ) : (
-                          userTeams.map((team) => (
-                            <button
-                              key={team.id}
-                              className="w-full text-left px-4 py-3 rounded-lg hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 text-sm font-medium text-gray-700 hover:text-blue-700 transition-all"
-                              onClick={() => {
-                                setOpenNavDropdown(null)
-                                navigate(`/team/${team.id}/settings`)
-                              }}
-                            >
-                              {team.name}
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </nav>
+              {/* 뷰 모드 전환 탭 */}
+              <div className="flex items-center gap-2 bg-white rounded-lg p-1 border border-gray-200 shadow-sm">
+                <button
+                  onClick={() => setCalendarViewMode('events')}
+                  className={`px-4 py-2 rounded-md font-medium text-sm transition-all ${
+                    calendarViewMode === 'events'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  일정 보기
+                </button>
+                <button
+                  onClick={() => setCalendarViewMode('schedule')}
+                  className={`px-4 py-2 rounded-md font-medium text-sm transition-all ${
+                    calendarViewMode === 'schedule'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  스케줄 보기
+                </button>
+              </div>
             </div>
           </div>
           
@@ -912,14 +1152,23 @@ export default function Home() {
           <div className="p-8">
             <div className="mb-4 space-y-2">
               <div className="flex gap-4 text-sm flex-wrap">
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded bg-green-500"></div>
-                  <span>일정 (Event)</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded" style={{ backgroundColor: 'rgb(59, 130, 246)' }}></div>
-                  <span>작업 (Task) - 팀별 색상</span>
-                </div>
+                {calendarViewMode === 'events' ? (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded bg-green-500"></div>
+                      <span>일정 (Event)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded" style={{ backgroundColor: 'rgb(59, 130, 246)' }}></div>
+                      <span>작업 (Task) - 팀별 색상</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded" style={{ backgroundColor: 'rgb(59, 130, 246)' }}></div>
+                    <span>스케줄된 작업 (Assignment) - 팀별 색상</span>
+                  </div>
+                )}
               </div>
             </div>
             <style>{`
@@ -972,7 +1221,7 @@ export default function Home() {
                 center: 'title',
                 right: 'dayGridMonth,timeGridWeek,timeGridDay'
               }}
-              events={events}
+              events={calendarViewMode === 'events' ? events : scheduleEvents}
               dateClick={handleDateClick}
               eventClick={handleEventClick}
               height="auto"

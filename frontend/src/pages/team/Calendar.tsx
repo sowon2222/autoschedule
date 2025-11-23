@@ -19,6 +19,7 @@ import type {
 } from '../../lib/ws'
 import CalendarEventModal from '../../components/CalendarEventModal'
 import CreateEventModal from '../../components/CreateEventModal'
+import MeetingSuggestionModal from '../../components/MeetingSuggestionModal'
 
 type CalendarEvent = {
   id: string
@@ -62,6 +63,11 @@ export default function Calendar() {
   const [selectedEventId, setSelectedEventId] = useState<string>('')
   const [createModalOpen, setCreateModalOpen] = useState(false)
   const [createModalDate, setCreateModalDate] = useState<Date | undefined>()
+  const [createModalStartTime, setCreateModalStartTime] = useState<string | undefined>()
+  const [createModalEndTime, setCreateModalEndTime] = useState<string | undefined>()
+  const [createModalTitle, setCreateModalTitle] = useState<string | undefined>()
+  const [createModalLocation, setCreateModalLocation] = useState<string | undefined>()
+  const [meetingSuggestionModalOpen, setMeetingSuggestionModalOpen] = useState(false)
   const teamId = id ? parseInt(id) : 0
   const teamColorRef = useRef<string>(teamBaseColor)
   // 자신이 발생시킨 변경사항 추적 (중복 업데이트 방지)
@@ -349,13 +355,19 @@ export default function Calendar() {
         setEvents((prev) => prev.filter((entry) => entry.id !== calendarId))
         return
       }
-      const end = new Date(dueDate.getTime() + (message.task.durationMin ?? 0) * 60 * 1000)
+      
+      // Assignment가 있으면 Assignment의 시간 사용, 없으면 마감일시 기준으로 역산
+      // TODO: Assignment 정보를 TaskResponse에 포함시키거나 별도 API로 조회
+      const durationMin = message.task.durationMin ?? 60
+      const start = new Date(dueDate.getTime() - durationMin * 60 * 1000) // 마감일시 - 소요시간
+      const end = dueDate // 마감일시가 종료 시간
+      
       const priority = message.task.priority ?? 3
       const colors = getColorByPriority(teamColorRef.current, priority)
       const converted: CalendarEvent = {
         id: calendarId,
         title: `📋 ${message.task.title}`,
-        start: dueDate.toISOString(),
+        start: start.toISOString(),
         end: end.toISOString(),
         backgroundColor: colors.bg,
         borderColor: colors.border,
@@ -442,14 +454,14 @@ export default function Calendar() {
     setCreateModalOpen(true)
   }
 
+
   const loadCalendarData = async () => {
     if (!id) return
     try {
-      // 팀의 CalendarEvent와 Task를 모두 조회
+      // 팀의 CalendarEvent와 Task만 조회 (Assignment는 조회하지 않음)
       const [eventsResponse, tasksResponse] = await Promise.all([
         api.get(`/api/events/team/${id}`).catch((error) => {
           console.error('[Calendar] Failed to load events:', error)
-          // 에러가 발생해도 빈 배열 반환하여 계속 진행
           return { data: [] }
         }),
         api.get(`/api/tasks/team/${id}`).catch((error) => {
@@ -504,13 +516,16 @@ export default function Calendar() {
       
       console.log('[Calendar] Converted calendar events:', calendarEvents.length, 'items')
 
-      // Task 변환 (마감일이 있는 경우만)
+      // Task 변환 (마감일 기준으로 역산하여 표시)
       if (tasksResponse.data && Array.isArray(tasksResponse.data)) {
         tasksResponse.data.forEach((task: Task) => {
-          if (task && task.dueAt) {
-            const startDate = new Date(task.dueAt)
-            if (!isNaN(startDate.getTime())) {
-              const endDate = new Date(startDate.getTime() + (task.durationMin || 60) * 60 * 1000)
+          // 마감일이 있는 경우만 표시
+          if (task.dueAt) {
+            const dueDate = new Date(task.dueAt)
+            if (!isNaN(dueDate.getTime())) {
+              const durationMin = task.durationMin || 60
+              const startDate = new Date(dueDate.getTime() - durationMin * 60 * 1000) // 마감일시 - 소요시간
+              const endDate = dueDate // 마감일시가 종료 시간
               
               const priority = task.priority || 3
               const colors = getColorByPriority(baseColor, priority)
@@ -570,14 +585,27 @@ export default function Calendar() {
       )}
       <div className="mb-6">
         <div className="bg-white rounded-xl shadow-lg p-5 border border-gray-200">
-          <div className="flex gap-6 text-sm flex-wrap">
-            <div className="flex items-center gap-2.5 px-3 py-2 bg-green-50 rounded-lg border border-green-200">
-              <div className="w-4 h-4 rounded-full bg-gradient-to-br from-green-500 to-green-600 shadow-sm"></div>
-              <span className="font-medium text-gray-700">일정 (Event)</span>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex gap-6 text-sm flex-wrap">
+              <div className="flex items-center gap-2.5 px-3 py-2 bg-green-50 rounded-lg border border-green-200">
+                <div className="w-4 h-4 rounded-full bg-gradient-to-br from-green-500 to-green-600 shadow-sm"></div>
+                <span className="font-medium text-gray-700">일정 (Event)</span>
+              </div>
+              <div className="flex items-center gap-2.5 px-3 py-2 bg-blue-50 rounded-lg border border-blue-200">
+                <div className="w-4 h-4 rounded-full shadow-sm" style={{ backgroundColor: teamBaseColor }}></div>
+                <span className="font-medium text-gray-700">작업 (Task) - 팀 색상</span>
+              </div>
             </div>
-            <div className="flex items-center gap-2.5 px-3 py-2 bg-blue-50 rounded-lg border border-blue-200">
-              <div className="w-4 h-4 rounded-full shadow-sm" style={{ backgroundColor: teamBaseColor }}></div>
-              <span className="font-medium text-gray-700">작업 (Task) - 팀 색상</span>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setMeetingSuggestionModalOpen(true)}
+                className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all shadow-md hover:shadow-lg font-medium flex items-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                미팅 추가
+              </button>
             </div>
           </div>
         </div>
@@ -766,12 +794,36 @@ export default function Calendar() {
         onClose={() => {
           setCreateModalOpen(false)
           setCreateModalDate(undefined)
+          setCreateModalStartTime(undefined)
+          setCreateModalEndTime(undefined)
+          setCreateModalTitle(undefined)
+          setCreateModalLocation(undefined)
         }}
         defaultDate={createModalDate}
+        defaultStartTime={createModalStartTime}
+        defaultEndTime={createModalEndTime}
+        defaultTitle={createModalTitle}
+        defaultLocation={createModalLocation}
         teamId={teamId}
         onSuccess={() => {
           // 이벤트 생성 후 목록 새로고침
           loadCalendarData()
+        }}
+      />
+      <MeetingSuggestionModal
+        isOpen={meetingSuggestionModalOpen}
+        onClose={() => {
+          setMeetingSuggestionModalOpen(false)
+        }}
+        teamId={teamId}
+        onSelectTime={(startsAt, endsAt, title, location) => {
+          // 선택된 시간으로 이벤트 생성 모달 열기
+          setCreateModalDate(new Date(startsAt))
+          setCreateModalStartTime(startsAt)
+          setCreateModalEndTime(endsAt)
+          setCreateModalTitle(title)
+          setCreateModalLocation(location)
+          setCreateModalOpen(true)
         }}
       />
     </div>

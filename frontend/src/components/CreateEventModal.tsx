@@ -6,11 +6,15 @@ type CreateEventModalProps = {
   isOpen: boolean
   onClose: () => void
   defaultDate?: Date
+  defaultStartTime?: string  // ISO string
+  defaultEndTime?: string    // ISO string
+  defaultTitle?: string       // 미팅 제목
+  defaultLocation?: string    // 미팅 장소
   teamId?: number
   onSuccess?: () => void
 }
 
-export default function CreateEventModal({ isOpen, onClose, defaultDate, teamId, onSuccess }: CreateEventModalProps) {
+export default function CreateEventModal({ isOpen, onClose, defaultDate, defaultStartTime, defaultEndTime, defaultTitle, defaultLocation, teamId, onSuccess }: CreateEventModalProps) {
   const { user } = useAuth()
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string>('')
@@ -36,22 +40,43 @@ export default function CreateEventModal({ isOpen, onClose, defaultDate, teamId,
     return `${hours}:${minutes}`
   }
 
-  const [formData, setFormData] = useState({
-    teamId: teamId || '',
-    title: '',
-    startDate: defaultDate ? new Date(defaultDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-    startTime: getDefaultStartTime(),
-    endDate: defaultDate ? new Date(defaultDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-    endTime: getDefaultEndTime(),
-    location: '',
-    attendees: [] as number[],
-    notes: '',
-    fixed: false,
-    recurrenceEnabled: false,
-    recurrenceType: 'WEEKLY' as 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY',
-    recurrenceEndDate: '',
-    recurrenceDaysOfWeek: [] as number[] // 0=일, 1=월, 2=화, 3=수, 4=목, 5=금, 6=토
-  })
+  const getInitialFormData = () => {
+    let startDate = defaultDate ? new Date(defaultDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+    let startTime = getDefaultStartTime()
+    let endDate = defaultDate ? new Date(defaultDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+    let endTime = getDefaultEndTime()
+
+    // defaultStartTime과 defaultEndTime이 있으면 사용
+    if (defaultStartTime) {
+      const start = new Date(defaultStartTime)
+      startDate = start.toISOString().split('T')[0]
+      startTime = `${start.getHours().toString().padStart(2, '0')}:${start.getMinutes().toString().padStart(2, '0')}`
+    }
+    if (defaultEndTime) {
+      const end = new Date(defaultEndTime)
+      endDate = end.toISOString().split('T')[0]
+      endTime = `${end.getHours().toString().padStart(2, '0')}:${end.getMinutes().toString().padStart(2, '0')}`
+    }
+
+    return {
+      teamId: teamId || '',
+      title: '',
+      startDate,
+      startTime,
+      endDate,
+      endTime,
+      location: '',
+      attendees: [] as number[],
+      notes: '',
+      fixed: false,
+      recurrenceEnabled: false,
+      recurrenceType: 'WEEKLY' as 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY',
+      recurrenceEndDate: '',
+      recurrenceDaysOfWeek: [] as number[] // 0=일, 1=월, 2=화, 3=수, 4=목, 5=금, 6=토
+    }
+  }
+
+  const [formData, setFormData] = useState(getInitialFormData())
 
   // 팀 목록 로드
   useEffect(() => {
@@ -69,6 +94,34 @@ export default function CreateEventModal({ isOpen, onClose, defaultDate, teamId,
       loadTeams()
     }
   }, [user?.id, isOpen])
+
+  // defaultStartTime, defaultEndTime, defaultTitle, defaultLocation이 변경되면 formData 업데이트
+  useEffect(() => {
+    if (isOpen) {
+      const updates: any = {}
+      
+      if (defaultStartTime) {
+        const start = new Date(defaultStartTime)
+        updates.startDate = start.toISOString().split('T')[0]
+        updates.startTime = `${start.getHours().toString().padStart(2, '0')}:${start.getMinutes().toString().padStart(2, '0')}`
+      }
+      if (defaultEndTime) {
+        const end = new Date(defaultEndTime)
+        updates.endDate = end.toISOString().split('T')[0]
+        updates.endTime = `${end.getHours().toString().padStart(2, '0')}:${end.getMinutes().toString().padStart(2, '0')}`
+      }
+      if (defaultTitle) {
+        updates.title = defaultTitle
+      }
+      if (defaultLocation !== undefined) {
+        updates.location = defaultLocation
+      }
+      
+      if (Object.keys(updates).length > 0) {
+        setFormData(prev => ({ ...prev, ...updates }))
+      }
+    }
+  }, [isOpen, defaultStartTime, defaultEndTime, defaultTitle, defaultLocation])
 
   // teamId prop이 변경되면 formData 업데이트
   useEffect(() => {

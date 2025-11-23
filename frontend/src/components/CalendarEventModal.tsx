@@ -36,10 +36,23 @@ type CalendarEventResponse = {
   updatedAt: string
 }
 
+type AssignmentResponse = {
+  id: number
+  scheduleId: number
+  taskId: number
+  taskTitle?: string
+  title: string
+  startsAt: string
+  endsAt: string
+  source: string
+  slotIndex?: number
+  meta?: string
+}
+
 type CalendarEventModalProps = {
   isOpen: boolean
   onClose: () => void
-  eventId: string // "task-123" or "event-456"
+  eventId: string // "task-123" or "event-456" or "schedule-task-123" or "schedule-456"
   onUpdate?: () => void
 }
 
@@ -51,7 +64,20 @@ export default function CalendarEventModal({ isOpen, onClose, eventId, onUpdate 
   
   const isTask = eventId.startsWith('task-')
   const isEvent = eventId.startsWith('event-')
-  const id = isTask ? parseInt(eventId.replace('task-', '')) : isEvent ? parseInt(eventId.replace('event-', '')) : null
+  const isScheduleTask = eventId.startsWith('schedule-task-')
+  const isScheduleAssignment = eventId.startsWith('schedule-') && !isScheduleTask
+  
+  const id = isTask 
+    ? parseInt(eventId.replace('task-', '')) 
+    : isEvent 
+    ? parseInt(eventId.replace('event-', '')) 
+    : isScheduleTask
+    ? parseInt(eventId.replace('schedule-task-', ''))
+    : isScheduleAssignment
+    ? parseInt(eventId.replace('schedule-', ''))
+    : null
+  
+  const [assignments, setAssignments] = useState<AssignmentResponse[]>([]) // 스케줄 작업의 Assignment 목록
 
   // Task form state
   const [taskData, setTaskData] = useState<TaskResponse | null>(null)
@@ -86,10 +112,41 @@ export default function CalendarEventModal({ isOpen, onClose, eventId, onUpdate 
     
     setLoading(true)
     setError('')
+    setAssignments([])
     
     const loadData = async () => {
       try {
-        if (isTask) {
+        if (isScheduleTask) {
+          // 스케줄 작업: Task 정보와 Assignment 목록 가져오기
+          const [taskResponse, assignmentsResponse] = await Promise.all([
+            api.get(`/api/tasks/${id}`),
+            api.get(`/api/assignments/task/${id}`)
+          ])
+          const taskData = taskResponse.data as TaskResponse
+          const assignmentsData = assignmentsResponse.data as AssignmentResponse[]
+          
+          // 시간 순서로 정렬
+          const sortedAssignments = assignmentsData.sort((a, b) => {
+            return new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()
+          })
+          
+          setTaskData(taskData)
+          setAssignments(sortedAssignments)
+          setTaskForm({
+            title: taskData.title,
+            durationMin: taskData.durationMin,
+            dueAt: taskData.dueAt ? new Date(taskData.dueAt).toISOString().slice(0, 16) : '',
+            priority: taskData.priority,
+            splittable: taskData.splittable,
+            tags: taskData.tags || '',
+            assigneeId: taskData.assigneeId
+          })
+        } else if (isScheduleAssignment) {
+          // 개별 Assignment: Assignment ID로 Task 찾기 (taskId를 모르므로 모든 팀의 Assignment를 조회해야 함)
+          // 이 케이스는 현재 사용되지 않지만, 혹시 모를 경우를 대비해 유지
+          // 실제로는 schedule-task-${taskId} 형식만 사용됨
+          setError('개별 Assignment 조회는 현재 지원되지 않습니다.')
+        } else if (isTask) {
           const response = await api.get(`/api/tasks/${id}`)
           const data = response.data as TaskResponse
           setTaskData(data)
@@ -127,7 +184,7 @@ export default function CalendarEventModal({ isOpen, onClose, eventId, onUpdate 
     }
     
     loadData()
-  }, [isOpen, id, isTask, isEvent])
+  }, [isOpen, id, isTask, isEvent, isScheduleTask, isScheduleAssignment])
 
   const handleSave = async () => {
     if (!id) return
@@ -208,7 +265,7 @@ export default function CalendarEventModal({ isOpen, onClose, eventId, onUpdate 
             <div className="bg-red-50 border border-red-200 rounded-md p-4 text-red-600">
               {error}
             </div>
-          ) : isTask && taskData ? (
+          ) : (isTask || isScheduleTask || isScheduleAssignment) && taskData ? (
             <div className="space-y-4">
               {isEditMode ? (
                 <>
@@ -316,6 +373,75 @@ export default function CalendarEventModal({ isOpen, onClose, eventId, onUpdate 
                     <div>
                       <span className="text-sm font-medium text-gray-500">태그</span>
                       <p className="text-gray-900 mt-1">{taskData.tags}</p>
+                    </div>
+                  )}
+                  
+                  {/* 스케줄된 작업의 경우 Assignment 목록 표시 */}
+                  {(isScheduleTask || isScheduleAssignment) && assignments.length > 0 && (
+                    <div className="mt-6 pt-6 border-t border-gray-200">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-3">
+                        스케줄 시간표 {assignments.length > 1 && `(${assignments.length}개 부분)`}
+                      </h3>
+                      <div className="space-y-2 max-h-64 overflow-y-auto">
+                        {assignments.map((assignment, index) => {
+                          let startTime = new Date(assignment.startsAt)
+                          let endTime = new Date(assignment.endsAt)
+                          
+                          // startsAt > endsAt인 경우 교체 (데이터 오류 보정)
+                          if (startTime.getTime() > endTime.getTime()) {
+                            console.warn(`[Schedule] Assignment 시간 오류 보정: id=${assignment.id}, startsAt=${assignment.startsAt}, endsAt=${assignment.endsAt}`)
+                            const temp = startTime
+                            startTime = endTime
+                            endTime = temp
+                          }
+                          
+                          const duration = Math.round((endTime.getTime() - startTime.getTime()) / (1000 * 60))
+                          
+                          return (
+                            <div
+                              key={assignment.id}
+                              className="bg-blue-50 border border-blue-200 rounded-lg p-3"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    {assignments.length > 1 && (
+                                      <span className="px-2 py-0.5 bg-blue-600 text-white text-xs font-semibold rounded">
+                                        부분 {index + 1}
+                                      </span>
+                                    )}
+                                    <span className="text-sm font-medium text-gray-700">
+                                      {assignment.title || taskData.title}
+                                    </span>
+                                  </div>
+                                  <div className="text-sm text-gray-600">
+                                    <span className="font-medium">
+                                      {startTime.toLocaleString('ko-KR', {
+                                        month: 'long',
+                                        day: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                        hour12: false
+                                      })}
+                                    </span>
+                                    {' ~ '}
+                                    <span className="font-medium">
+                                      {endTime.toLocaleString('ko-KR', {
+                                        month: 'long',
+                                        day: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                        hour12: false
+                                      })}
+                                    </span>
+                                    <span className="ml-2 text-gray-500">({duration}분)</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
                     </div>
                   )}
                 </>
@@ -549,10 +675,36 @@ export default function CalendarEventModal({ isOpen, onClose, eventId, onUpdate 
                         setSaving(true)
                         setError('')
                         await api.delete(`/api/tasks/${id}`)
-                        if (onUpdate) onUpdate()
+                        // 삭제 성공: 상태 초기화 후 모달 닫기
+                        setSaving(false)
+                        // WebSocket으로 자동 업데이트되므로 onUpdate 호출 불필요
                         onClose()
                       } catch (err: any) {
                         setError(err.response?.data?.message || '작업 삭제에 실패했습니다.')
+                        setSaving(false)
+                      }
+                    }
+                  }}
+                  disabled={saving}
+                  className="px-4 py-2 text-white bg-red-600 rounded-md hover:bg-red-700 disabled:bg-red-400 disabled:cursor-not-allowed transition"
+                >
+                  {saving ? '삭제 중...' : '삭제'}
+                </button>
+              )}
+              {isEvent && id && (
+                <button
+                  onClick={async () => {
+                    if (confirm(`일정 "${eventData?.title}"을(를) 삭제하시겠습니까?`)) {
+                      try {
+                        setSaving(true)
+                        setError('')
+                        await api.delete(`/api/events/${id}`)
+                        // 삭제 성공: 상태 초기화 후 모달 닫기
+                        setSaving(false)
+                        // WebSocket으로 자동 업데이트되므로 onUpdate 호출 불필요
+                        onClose()
+                      } catch (err: any) {
+                        setError(err.response?.data?.message || '일정 삭제에 실패했습니다.')
                         setSaving(false)
                       }
                     }
