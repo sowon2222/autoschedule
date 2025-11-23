@@ -3,8 +3,11 @@ package com.example.sbb.controller;
 import com.example.sbb.controller.support.AuthenticatedUserResolver;
 import com.example.sbb.dto.request.CalendarEventCreateRequest;
 import com.example.sbb.dto.request.CalendarEventUpdateRequest;
+import com.example.sbb.dto.request.MeetingSuggestionRequest;
 import com.example.sbb.dto.response.CalendarEventResponse;
+import com.example.sbb.dto.response.MeetingSuggestionResponse;
 import com.example.sbb.service.CalendarEventService;
+import com.example.sbb.service.MeetingSuggestionService;
 import com.example.sbb.service.SlotLockService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -25,11 +28,16 @@ import org.springframework.web.bind.annotation.*;
 public class CalendarEventController {
     private final CalendarEventService calendarEventService;
     private final SlotLockService slotLockService;
+    private final MeetingSuggestionService meetingSuggestionService;
     private static final Duration EVENT_LOCK_TTL = Duration.ofMinutes(3);
 
-    public CalendarEventController(CalendarEventService calendarEventService, SlotLockService slotLockService) {
+    public CalendarEventController(
+            CalendarEventService calendarEventService, 
+            SlotLockService slotLockService,
+            MeetingSuggestionService meetingSuggestionService) {
         this.calendarEventService = calendarEventService;
         this.slotLockService = slotLockService;
+        this.meetingSuggestionService = meetingSuggestionService;
     }
 
     @PostMapping
@@ -145,6 +153,18 @@ public class CalendarEventController {
 
     private String buildEventUpdateSlotKey(Long eventId) {
         return "calendar:event:id:" + eventId;
+    }
+
+    @PostMapping("/suggest")
+    @Operation(summary = "미팅 시간 추천", description = "팀원들의 스케줄을 고려하여 최적의 미팅 시간을 추천합니다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "추천 성공"),
+        @ApiResponse(responseCode = "400", description = "요청 검증 실패")
+    })
+    public ResponseEntity<MeetingSuggestionResponse> suggestMeetingTimes(
+            @Valid @RequestBody MeetingSuggestionRequest request) {
+        MeetingSuggestionResponse response = meetingSuggestionService.suggestMeetingTimes(request);
+        return ResponseEntity.ok(response);
     }
 }
 
