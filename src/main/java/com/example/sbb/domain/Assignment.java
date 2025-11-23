@@ -14,6 +14,8 @@ import jakarta.persistence.Table;
 import java.time.OffsetDateTime;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "assignment")
@@ -49,8 +51,9 @@ public class Assignment {
     @Column(name = "slot_index")
     private Integer slotIndex;
 
-    // Store JSONB as raw text to avoid custom types for now
-    @Column(name = "meta", columnDefinition = "jsonb")
+    // String을 JSONB로 변환
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "meta", nullable = true)
     private String meta;
 
 }
