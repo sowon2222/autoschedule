@@ -53,7 +53,7 @@ public class ScheduleGenerateResponse {
     }
     
     /**
-     * 배치되지 않은 작업
+     * 배치되지 않았거나 부분 배치된 작업
      */
     @Getter
     @Setter
@@ -62,6 +62,8 @@ public class ScheduleGenerateResponse {
     public static class UnassignedTask {
         private Long taskId;
         private String reason; // 배치 실패 이유
+        private Integer requiredMinutes; // 필요한 시간(분)
+        private Integer assignedMinutes; // 배치된 시간(분), 0이면 완전 실패
     }
 }
 

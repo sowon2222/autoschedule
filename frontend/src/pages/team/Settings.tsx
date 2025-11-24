@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import api from '../../lib/api'
 
 type Team = { id: number; name: string }
@@ -7,11 +7,13 @@ type Member = { userId: number; userName: string; userEmail: string; role: strin
 
 export default function Settings(){
   const { id } = useParams()
+  const navigate = useNavigate()
   const [teamName, setTeamName] = useState('')
   const [currentTeam, setCurrentTeam] = useState<Team | null>(null)
   const [inviteEmail, setInviteEmail] = useState('')
   const [members, setMembers] = useState<Member[]>([])
   const [showCreateTeam, setShowCreateTeam] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const userId = Number(localStorage.getItem('userId') || '0')
 
   const reload = async () => {
@@ -44,6 +46,21 @@ export default function Settings(){
     setInviteEmail('')
     await reload()
     alert('초대되었습니다.')
+  }
+
+  const deleteTeam = async () => {
+    if (!id) return
+    if (!confirm(`정말로 "${currentTeam?.name}" 팀을 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없으며, 팀의 모든 데이터(작업, 일정, 스케줄 등)가 함께 삭제됩니다.`)) {
+      return
+    }
+    try {
+      await api.delete(`/api/teams/${id}`)
+      alert('팀이 삭제되었습니다.')
+      navigate('/')
+    } catch (error) {
+      console.error('팀 삭제 실패:', error)
+      alert('팀 삭제에 실패했습니다.')
+    }
   }
 
   return (
@@ -92,14 +109,56 @@ export default function Settings(){
                 </h3>
                 <p className="text-sm text-gray-600">현재 팀</p>
               </div>
+              <div className="flex gap-2">
+                <button 
+                  className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-2 rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all shadow-md hover:shadow-lg font-medium text-sm flex items-center gap-2"
+                  onClick={() => setShowCreateTeam(true)}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  팀 추가
+                </button>
+                <button 
+                  className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-all shadow-md hover:shadow-lg font-medium text-sm flex items-center gap-2"
+                  onClick={() => setShowDeleteConfirm(true)}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  팀 삭제
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {showDeleteConfirm && currentTeam && (
+          <section className="bg-red-50 border-2 border-red-200 rounded-xl shadow-lg p-6">
+            <h3 className="text-xl font-bold mb-4 text-red-800 flex items-center gap-2">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              팀 삭제 확인
+            </h3>
+            <p className="text-gray-700 mb-4">
+              정말로 <strong className="text-red-800">"{currentTeam.name}"</strong> 팀을 삭제하시겠습니까?
+            </p>
+            <p className="text-sm text-gray-600 mb-6">
+              이 작업은 되돌릴 수 없으며, 팀의 모든 데이터(작업, 일정, 스케줄, 근무시간 등)가 함께 삭제됩니다.
+            </p>
+            <div className="flex gap-3">
               <button 
-                className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-2 rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all shadow-md hover:shadow-lg font-medium text-sm flex items-center gap-2"
-                onClick={() => setShowCreateTeam(true)}
+                className="bg-red-600 text-white px-6 py-2.5 rounded-lg hover:bg-red-700 transition-all shadow-md hover:shadow-lg font-medium"
+                onClick={deleteTeam}
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                팀 추가
+                삭제
+              </button>
+              <button 
+                className="bg-gray-100 text-gray-700 px-6 py-2.5 rounded-lg hover:bg-gray-200 transition font-medium"
+                onClick={() => setShowDeleteConfirm(false)}
+              >
+                취소
               </button>
             </div>
           </section>

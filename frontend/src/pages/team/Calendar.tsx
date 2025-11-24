@@ -356,11 +356,10 @@ export default function Calendar() {
         return
       }
       
-      // Assignment가 있으면 Assignment의 시간 사용, 없으면 마감일시 기준으로 역산
-      // TODO: Assignment 정보를 TaskResponse에 포함시키거나 별도 API로 조회
-      const durationMin = message.task.durationMin ?? 60
-      const start = new Date(dueDate.getTime() - durationMin * 60 * 1000) // 마감일시 - 소요시간
-      const end = dueDate // 마감일시가 종료 시간
+      // 작업은 마감시간만 표시 (소요시간 없이, start = end = 마감일시)
+      // Assignment는 스케줄 화면에서 시작시간~끝나는시간으로 표시됨
+      const start = dueDate // 마감일시
+      const end = dueDate // 마감일시 (작업은 마감시간만 표시)
       
       const priority = message.task.priority ?? 3
       const colors = getColorByPriority(teamColorRef.current, priority)

@@ -195,7 +195,9 @@ public class ScoreCalculator {
                 // 마감일까지 여유가 많으면 약간 감점 (너무 일찍 배치)
                 long daysEarly = hoursUntilDeadline / 24;
                 if (daysEarly > 7) {
-                    totalPenalty += (int) (DEADLINE_PENALTY_WEIGHT * (daysEarly - 7) * 0.1);
+                    int penalty = (int) (DEADLINE_PENALTY_WEIGHT * (daysEarly - 7) * 0.1);
+                    // 최대 30점까지만 감점 (무제한 감점 방지)
+                    totalPenalty += Math.min(penalty, 30);
                 }
             }
         }

@@ -23,6 +23,7 @@ type CalendarEventItem = {
   location?: string
   teamName?: string
   source?: 'TASK' | 'EVENT' | 'BREAK'
+  className?: string
   extendedProps?: {
     type?: 'task' | 'event'
     priority?: number
@@ -572,13 +573,15 @@ export default function Home() {
             const taskId = `task-${task.id}`
             taskIds.add(taskId)
             
-            const startDate = new Date(task.dueAt)
-            if (isNaN(startDate.getTime())) {
+            const dueDate = new Date(task.dueAt)
+            if (isNaN(dueDate.getTime())) {
               console.warn('Invalid date for task:', task)
               return
             }
             
-            const endDate = new Date(startDate.getTime() + (task.durationMin || 60) * 60 * 1000)
+            // 작업은 마감시간만 표시 (소요시간 없이, start = end = 마감일시)
+            const startDate = dueDate
+            const endDate = dueDate
             const priority = task.priority || 3
             const teamId = task.teamId
             
@@ -593,6 +596,7 @@ export default function Home() {
               end: endDate.toISOString(),
               backgroundColor: colors.bg,
               borderColor: colors.border,
+              className: 'fc-task-event', // 작업 이벤트를 한 줄로 표시하기 위한 클래스
               extendedProps: {
                 type: 'task',
                 priority: task.priority,
@@ -620,13 +624,15 @@ export default function Home() {
             
             // 마감일이 있는 모든 Task 표시
             if (task.dueAt) {
-              const startDate = new Date(task.dueAt)
-              if (isNaN(startDate.getTime())) {
+              const dueDate = new Date(task.dueAt)
+              if (isNaN(dueDate.getTime())) {
                 console.warn('Invalid date for task:', task)
                 return
               }
               
-              const endDate = new Date(startDate.getTime() + (task.durationMin || 60) * 60 * 1000)
+              // 작업은 마감시간만 표시 (소요시간 없이, start = end = 마감일시)
+              const startDate = dueDate
+              const endDate = dueDate
               const priority = task.priority || 3
               
               // 팀 색상 가져오기 (task.teamId 또는 현재 팀 ID 사용)
@@ -642,6 +648,7 @@ export default function Home() {
                 end: endDate.toISOString(),
                 backgroundColor: colors.bg,
                 borderColor: colors.border,
+                className: 'fc-task-event', // 작업 이벤트를 한 줄로 표시하기 위한 클래스
                 extendedProps: {
                   type: 'task',
                   priority: task.priority,
@@ -788,11 +795,10 @@ export default function Home() {
         return
       }
 
-      // Assignment가 있으면 Assignment의 시간 사용, 없으면 마감일시 기준으로 역산
-      // TODO: Assignment 정보를 TaskResponse에 포함시키거나 별도 API로 조회
-      const durationMin = message.task.durationMin ?? 60
-      const startDate = new Date(dueDate.getTime() - durationMin * 60 * 1000) // 마감일시 - 소요시간
-      const endDate = dueDate // 마감일시가 종료 시간
+      // 작업은 마감시간만 표시 (소요시간 없이, start = end = 마감일시)
+      // Assignment는 스케줄 화면에서 시작시간~끝나는시간으로 표시됨
+      const startDate = dueDate // 마감일시
+      const endDate = dueDate // 마감일시 (작업은 마감시간만 표시)
       
       const priority = message.task.priority ?? 3
       const teamId = message.task.teamId
@@ -806,6 +812,7 @@ export default function Home() {
         end: endDate.toISOString(),
         backgroundColor: colors.bg,
         borderColor: colors.border,
+        className: 'fc-task-event', // 작업 이벤트를 한 줄로 표시하기 위한 클래스
         extendedProps: {
           type: 'task',
           priority,
@@ -991,7 +998,7 @@ export default function Home() {
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                     </svg>
-                    {isGeneratingSchedule ? `스케줄 생성 중... (${userTeams.length}개 팀)` : `내 스케줄 생성하기`}
+                    {isGeneratingSchedule ? `스케줄 생성 중... (${userTeams.length}개 팀)` : `스케줄 배치하기`}
                   </button>
                   
                   {/* 팀별 점수 표시 */}
@@ -1096,9 +1103,6 @@ export default function Home() {
                               }`}>
                                 우선순위 {task.priority}
                               </span>
-                              <span className="text-xs text-gray-500">
-                                {task.durationMin}분
-                              </span>
                             </div>
                           </div>
                         </div>
@@ -1119,7 +1123,7 @@ export default function Home() {
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-bold text-gray-900">
-                  {user ? `${user?.name}님의 일정` : '일정 캘린더'}
+                  {user ? `${user?.name}님의 전체 일정` : '일정 캘린더'}
                 </h2>
               </div>
               {/* 뷰 모드 전환 탭 */}
@@ -1132,7 +1136,7 @@ export default function Home() {
                       : 'text-gray-700 hover:bg-gray-50'
                   }`}
                 >
-                  일정 보기
+                  일정 / 작업 보기
                 </button>
                 <button
                   onClick={() => setCalendarViewMode('schedule')}
@@ -1211,6 +1215,16 @@ export default function Home() {
               .fc-event {
                 border-radius: 0.375rem !important;
                 padding: 2px 4px !important;
+              }
+              /* 작업 이벤트는 한 줄로 표시 */
+              .fc-task-event {
+                height: 20px !important;
+                min-height: 20px !important;
+                max-height: 20px !important;
+                line-height: 16px !important;
+                overflow: hidden !important;
+                white-space: nowrap !important;
+                text-overflow: ellipsis !important;
               }
             `}</style>
             <FullCalendar

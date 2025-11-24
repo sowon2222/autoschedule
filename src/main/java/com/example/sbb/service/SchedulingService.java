@@ -21,6 +21,8 @@ import com.example.sbb.repository.WorkHourRepository;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -190,11 +192,12 @@ public class SchedulingService {
             
             schedule = scheduleRepository.save(schedule);
             
-            // 그리디 배치 실행
+            // 그리디 배치 실행 (비동기 메서드는 부분 배치 정보 수집 안 함)
             List<Assignment> assignments = greedyScheduler.scheduleTasks(
                 input.getTasks(),
                 availableSlots,
-                schedule
+                schedule,
+                null
             );
             
             // Assignment 저장
@@ -307,11 +310,15 @@ public class SchedulingService {
         assignmentRepository.deleteByTeamId(teamId);
         log.info("기존 Assignment 삭제 완료: teamId={}", teamId);
         
+        // 부분 배치 정보 수집용 맵
+        Map<Long, GreedyScheduler.PartialAssignmentInfo> partialAssignments = new LinkedHashMap<>();
+        
         // 그리디 배치 실행
         List<Assignment> assignments = greedyScheduler.scheduleTasks(
             input.getTasks(),
             availableSlots,
-            schedule
+            schedule,
+            partialAssignments
         );
         
         // Assignment 저장
@@ -322,28 +329,47 @@ public class SchedulingService {
         schedule.setScore(score);
         schedule = scheduleRepository.save(schedule);
         
-        // 배치되지 않은 작업 찾기
+        // 배치되지 않은 작업 및 부분 배치 작업 찾기
         List<Long> assignedTaskIds = assignments.stream()
             .filter(a -> a.getTask() != null)
             .map(a -> a.getTask().getId())
             .distinct()
             .collect(java.util.stream.Collectors.toList());
         
-        List<ScheduleGenerateResponse.UnassignedTask> unassignedTasks = input.getTasks().stream()
-            .filter(task -> !assignedTaskIds.contains(task.getId()))
-            .map(task -> {
-                String reason = "마감일까지 충분한 시간 부족";
+        // 부분 배치 정보를 포함한 UnassignedTask 리스트 생성
+        List<ScheduleGenerateResponse.UnassignedTask> unassignedTasks = new ArrayList<>();
+        
+        // 부분 배치된 작업 추가
+        for (GreedyScheduler.PartialAssignmentInfo info : partialAssignments.values()) {
+            ScheduleGenerateResponse.UnassignedTask unassignedTask = new ScheduleGenerateResponse.UnassignedTask();
+            unassignedTask.setTaskId(info.taskId);
+            unassignedTask.setReason(info.reason);
+            unassignedTask.setRequiredMinutes(info.requiredMinutes);
+            unassignedTask.setAssignedMinutes(info.assignedMinutes);
+            unassignedTasks.add(unassignedTask);
+        }
+        
+        // 완전히 배치되지 않은 작업 추가 (부분 배치 정보에 없는 경우만)
+        List<Long> partialTaskIds = new ArrayList<>(partialAssignments.keySet());
+        input.getTasks().stream()
+            .filter(task -> !assignedTaskIds.contains(task.getId()) && !partialTaskIds.contains(task.getId()))
+            .forEach(task -> {
+                String reason = "마감일까지 시간이 부족합니다";
                 if (task.getDueAt() == null) {
-                    reason = "사용 가능한 시간 슬롯 부족";
+                    reason = "사용 가능한 시간 슬롯이 부족합니다";
                 } else {
                     // 마감일이 지났는지 확인
                     if (task.getDueAt().isBefore(OffsetDateTime.now())) {
                         reason = "마감일이 이미 지났습니다";
                     }
                 }
-                return new ScheduleGenerateResponse.UnassignedTask(task.getId(), reason);
-            })
-            .collect(java.util.stream.Collectors.toList());
+                ScheduleGenerateResponse.UnassignedTask unassignedTask = new ScheduleGenerateResponse.UnassignedTask();
+                unassignedTask.setTaskId(task.getId());
+                unassignedTask.setReason(reason);
+                unassignedTask.setRequiredMinutes(task.getDurationMin());
+                unassignedTask.setAssignedMinutes(0);
+                unassignedTasks.add(unassignedTask);
+            });
         
         // FullCalendar 형식으로 변환
         List<ScheduleGenerateResponse.FullCalendarEvent> scheduleEvents = assignments.stream()

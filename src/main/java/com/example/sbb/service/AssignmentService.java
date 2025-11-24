@@ -93,6 +93,16 @@ public class AssignmentService {
     }
 
     /**
+     * Assignment ID로 단일 Assignment 조회
+     */
+    @Transactional(readOnly = true)
+    public AssignmentResponse findById(Long assignmentId) {
+        Assignment assignment = assignmentRepository.findById(assignmentId)
+            .orElseThrow(() -> new IllegalArgumentException("Assignment를 찾을 수 없습니다: " + assignmentId));
+        return toAssignmentResponse(assignment);
+    }
+
+    /**
      * Assignment 엔티티를 AssignmentResponse로 변환
      */
     private AssignmentResponse toAssignmentResponse(Assignment assignment) {

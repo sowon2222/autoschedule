@@ -74,5 +74,17 @@ public class AssignmentController {
         List<AssignmentResponse> assignments = assignmentService.findByScheduleId(scheduleId);
         return ResponseEntity.ok(assignments);
     }
+
+    @GetMapping("/{id}")
+    @Operation(summary = "Assignment 단건 조회", description = "Assignment ID로 단일 Assignment 정보를 조회합니다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "조회 성공"),
+        @ApiResponse(responseCode = "404", description = "Assignment를 찾을 수 없음")
+    })
+    public ResponseEntity<AssignmentResponse> getAssignment(
+            @Parameter(description = "Assignment ID", example = "1") @PathVariable Long id) {
+        AssignmentResponse assignment = assignmentService.findById(id);
+        return ResponseEntity.ok(assignment);
+    }
 }
 

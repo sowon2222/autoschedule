@@ -5,7 +5,6 @@ import com.example.sbb.domain.TimeSlot;
 import com.example.sbb.domain.WorkHour;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -17,31 +16,34 @@ import org.springframework.stereotype.Component;
 
 /**
  * 시간 슬롯 생성기
- * 근무시간을 기반으로 30분 단위 슬롯을 생성하고, 캘린더 이벤트로 인한 차단을 처리합니다.
+ * 근무시간을 기반으로 30분 단위 슬롯을 생성하고, 캘린더 이벤트는 차단처리 하는 기능입니다.
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class TimeSlotGenerator {
 
-    private static final int SLOTS_PER_DAY = 48; // 24시간 * 2 (30분 단위)
-
     /**
      * 날짜 범위에 대해 사용자별 사용 가능한 시간 슬롯을 생성합니다.
      * 
-     * @param workHours 근무시간 설정 목록
-     * @param calendarEvents 캘린더 이벤트 목록 (고정/반복)
-     * @param rangeStart 시작일
-     * @param rangeEnd 종료일
-     * @param targetUserIds 대상 사용자 ID 목록 (팀 기본 근무시간 적용용, null이면 무시)
-     * @return 사용자 ID를 키로 하는 사용 가능한 슬롯 맵
+     * @param workHours 근무시간 설정 목록 (팀 기본 근무시간 적용 대상, null이면 workHours에서 추출)
+     * @param calendarEvents 캘린더 이벤트 목록 (고정/반복) → 차단처리 대상
+     * @param rangeStart 시작일 (시작일부터 종료일까지 슬롯 생성)
+     * @param rangeEnd 종료일   (시작일부터 종료일까지 슬롯 생성)
+     * @return 사용자 ID를 키로 하는 사용 가능한 슬롯 맵 (사용자 ID별 사용 가능한 슬롯 목록)
      */
     public Map<Long, List<TimeSlot>> generateAvailableSlots(
             List<WorkHour> workHours,
             List<CalendarEvent> calendarEvents,
             LocalDate rangeStart,
             LocalDate rangeEnd) {
-        return generateAvailableSlots(workHours, calendarEvents, rangeStart, rangeEnd, null);
+        // targetUserIds가 null이면 workHours에서 개인 근무시간이 있는 사용자들을 추출
+        List<Long> targetUserIds = workHours.stream()
+            .filter(wh -> wh.getUser() != null)
+            .map(wh -> wh.getUser().getId())
+            .distinct()
+            .collect(Collectors.toList());
+        return generateAvailableSlots(workHours, calendarEvents, rangeStart, rangeEnd, targetUserIds);
     }
     
     /**
@@ -51,7 +53,7 @@ public class TimeSlotGenerator {
      * @param calendarEvents 캘린더 이벤트 목록 (고정/반복)
      * @param rangeStart 시작일
      * @param rangeEnd 종료일
-     * @param targetUserIds 대상 사용자 ID 목록 (팀 기본 근무시간 적용용)
+     * @param targetUserIds 대상 사용자 ID 목록 (팀 기본 근무시간 적용 대상, null이면 workHours에서 추출)
      * @return 사용자 ID를 키로 하는 사용 가능한 슬롯 맵
      */
     public Map<Long, List<TimeSlot>> generateAvailableSlots(
@@ -62,6 +64,16 @@ public class TimeSlotGenerator {
             List<Long> targetUserIds) {
         
         log.info("시간 슬롯 생성 시작: range={} ~ {}", rangeStart, rangeEnd);
+        
+        // targetUserIds가 null이면 workHours에서 개인 근무시간이 있는 사용자들을 추출
+        if (targetUserIds == null) {
+            targetUserIds = workHours.stream()
+                .filter(wh -> wh.getUser() != null)
+                .map(wh -> wh.getUser().getId())
+                .distinct()
+                .collect(Collectors.toList());
+            log.debug("targetUserIds가 null이어서 workHours에서 추출: {}명", targetUserIds.size());
+        }
         
         // 1. 근무시간 기반으로 기본 슬롯 생성
         Map<Long, List<TimeSlot>> userSlots = generateSlotsFromWorkHours(workHours, rangeStart, rangeEnd, targetUserIds);
@@ -108,6 +120,9 @@ public class TimeSlotGenerator {
             // 주말 처리: 기본적으로 불가능한 시간으로 설정 (필요 시 옵션으로 변경 가능)
             boolean isWeekend = dayOfWeek == 6 || dayOfWeek == 7; // 토요일 또는 일요일
             
+            // 각 사용자별로 근무시간 범위를 저장 (근무시간 외 슬롯 생성용)
+            Map<Long, List<int[]>> userWorkHourRanges = new HashMap<>();
+            
             // 각 근무시간 설정에 대해
             for (WorkHour workHour : workHours) {
                 // 요일이 일치하는지 확인
@@ -131,9 +146,15 @@ public class TimeSlotGenerator {
                 
                 if (userId == null) {
                     // 팀 기본 근무시간 (targetUserIds의 모든 사용자에게 적용)
+                    // targetUserIds가 null이거나 비어있으면 경고를 주고 건너뛰기
+                    // (이 경우는 generateAvailableSlots에서 이미 처리되어야 함)
                     if (targetUserIds != null && !targetUserIds.isEmpty()) {
                         for (Long targetUserId : targetUserIds) {
                             List<TimeSlot> slots = userSlots.computeIfAbsent(targetUserId, k -> new ArrayList<>());
+                            
+                            // 근무시간 범위 저장 (근무시간 외 슬롯 생성용)
+                            userWorkHourRanges.computeIfAbsent(targetUserId, k -> new ArrayList<>())
+                                .add(new int[]{startSlot, endSlot});
                             
                             for (int slotIndex = startSlot; slotIndex < endSlot; slotIndex++) {
                                 OffsetDateTime startTime = TimeSlot.calculateStartTime(currentDate, slotIndex);
@@ -153,13 +174,20 @@ public class TimeSlotGenerator {
                                 slots.add(slot);
                             }
                         }
+                    } else {
+                        // targetUserIds가 null이거나 비어있으면 경고 (이론적으로는 발생하지 않아야 함)
+                        log.warn("팀 기본 근무시간이 적용되지 않음: targetUserIds가 null이거나 비어있음. date={}, dow={}", 
+                            currentDate, workHour.getDow());
                     }
-                    // targetUserIds가 null이면 건너뛰기 (기존 동작 유지)
                     continue;
                 }
                 
                 // 개인 근무시간
                 List<TimeSlot> slots = userSlots.computeIfAbsent(userId, k -> new ArrayList<>());
+                
+                // 근무시간 범위 저장 (근무시간 외 슬롯 생성용)
+                userWorkHourRanges.computeIfAbsent(userId, k -> new ArrayList<>())
+                    .add(new int[]{startSlot, endSlot});
                 
                 for (int slotIndex = startSlot; slotIndex < endSlot; slotIndex++) {
                     OffsetDateTime startTime = TimeSlot.calculateStartTime(currentDate, slotIndex);
@@ -180,6 +208,41 @@ public class TimeSlotGenerator {
                 }
             }
             
+            // 근무시간 외 시간에도 슬롯 생성 (긴급 작업용, 선호도 낮게 설정)
+            // 하루는 48개 슬롯 (0시-24시, 30분 단위)
+            for (Long userId : userSlots.keySet()) {
+                List<TimeSlot> slots = userSlots.get(userId);
+                List<int[]> workHourRanges = userWorkHourRanges.getOrDefault(userId, new ArrayList<>());
+                
+                // 근무시간 외 슬롯 생성 (0시-근무시작, 근무종료-24시)
+                for (int slotIndex = 0; slotIndex < 48; slotIndex++) {
+                    final int currentSlotIndex = slotIndex; // final 변수로 복사
+                    // 이미 근무시간 내 슬롯이 생성되었는지 확인
+                    boolean isInWorkHour = workHourRanges.stream()
+                        .anyMatch(range -> currentSlotIndex >= range[0] && currentSlotIndex < range[1]);
+                    
+                    if (!isInWorkHour) {
+                        // 근무시간 외 슬롯 생성 (긴급 작업용)
+                        OffsetDateTime startTime = TimeSlot.calculateStartTime(currentDate, currentSlotIndex);
+                        
+                        // 선호도 계산 (근무시간 외, 주말 여부 고려)
+                        // 근무시간 외는 선호도 0.05~0.1 정도로 설정 (긴급 작업만 사용 가능)
+                        double preferenceScore = calculatePreference(startTime, false, isWeekend);
+                        
+                        TimeSlot slot = TimeSlot.builder()
+                            .date(currentDate)
+                            .slotIndex(currentSlotIndex)
+                            .startTime(startTime)
+                            .endTime(TimeSlot.calculateEndTime(currentDate, currentSlotIndex))
+                            .available(true)
+                            .userId(userId)
+                            .preferenceScore(preferenceScore)
+                            .build();
+                        slots.add(slot);
+                    }
+                }
+            }
+            
             currentDate = currentDate.plusDays(1);
         }
         
@@ -196,58 +259,43 @@ public class TimeSlotGenerator {
 
     /**
      * 시간대별 선호도 점수 계산
-     * - 근무시간: 높은 점수 (1.0)
-     * - 나머지 시간: 중간 점수 (0.2-0.5)
-     * - 주말: 낮은 점수 (0.3)
-     * - 새벽(22:00-07:00): 매우 낮은 점수 (0.05, 거의 hard 제약)
+     * - 기본값: 평일 1.0, 주말 0.5
+     * - 점심시간(12-13시): -0.1
+     * - 밤/새벽(22-07시): -0.4
+     * - 최소값: 0.1 (새벽 시간도 완전히 배제하지 않음)
      */
     private double calculatePreference(OffsetDateTime startTime, boolean isWorkHour, boolean isWeekend) {
         int hour = startTime.getHour();
+        boolean isLunch = (hour >= 12 && hour < 13);
+        boolean isNight = (hour >= 22 || hour < 7);
         
-        // 새벽 시간 (22:00-07:00): 매우 낮은 점수 (거의 hard 제약)
-        if (hour >= 22 || hour < 7) {
-            return 0.05;
-        }
+        // 1) 기본값: 평일 1.0, 주말 0.5
+        double preference = isWeekend ? 0.5 : 1.0;
         
-        // 근무시간 밖이면 중간 점수
+        // 2) 근무시간 밖이면 추가로 감점
         if (!isWorkHour) {
-            // 점심시간 (12:00-13:00)
-            if (hour >= 12 && hour < 13) {
-                return 0.3;
-            }
-            // 저녁시간 (18:00-19:00)
-            if (hour >= 18 && hour < 19) {
-                return 0.4;
-            }
-            // 나머지 시간
-            return 0.2;
+            preference -= 0.3; // 근무시간 밖은 기본적으로 낮은 점수
         }
         
-        // 근무시간 내
-        double baseScore = 1.0;
-        
-        // 점심시간 (12:00-13:00): 약간 낮은 점수
-        if (hour >= 12 && hour < 13) {
-            baseScore = 0.8;
-        }
-        // 저녁시간 (18:00-19:00): 약간 낮은 점수
-        else if (hour >= 18 && hour < 19) {
-            baseScore = 0.9;
+        // 3) 점심시간은 살짝만 깎기
+        if (isLunch) {
+            preference -= 0.1;
         }
         
-        // 주말이면 선호도 낮게 (0.3으로 제한)
-        if (isWeekend) {
-            return Math.min(baseScore, 0.3);
+        // 4) 밤/새벽은 더 크게 깎기
+        if (isNight) {
+            preference -= 0.4;
         }
         
-        return baseScore;
-    }
-    
-    /**
-     * 오버로드: 주말 여부를 모를 때 (기본값: 평일)
-     */
-    private double calculatePreference(OffsetDateTime startTime, boolean isWorkHour) {
-        return calculatePreference(startTime, isWorkHour, false);
+        // 5) 최소/최대 범위 클램프
+        if (preference < 0.1) {
+            preference = 0.1; // 최소 0.1 (기존 0.05 대신)
+        }
+        if (preference > 1.0) {
+            preference = 1.0;
+        }
+        
+        return preference;
     }
 
     /**
@@ -273,9 +321,11 @@ public class TimeSlotGenerator {
     /**
      * 단일 이벤트로 인한 슬롯 차단
      * 이벤트와 겹치는 모든 슬롯을 차단
+     * 
+     * 개선: 날짜 비교 대신 시간 구간 겹침만 확인하여 자정을 넘는 이벤트도 정확히 처리
+     * 예: "11/24 23:00 ~ 11/25 01:00" 이벤트는 11/24와 11/25 양쪽 날짜의 슬롯을 모두 차단
      */
     private void blockSlotsForSingleEvent(Map<Long, List<TimeSlot>> userSlots, CalendarEvent event) {
-        LocalDate eventDate = event.getStartsAt().toLocalDate();
         OffsetDateTime eventStart = event.getStartsAt();
         OffsetDateTime eventEnd = event.getEndsAt();
         
@@ -293,14 +343,15 @@ public class TimeSlotGenerator {
             if (slots == null) continue;
             
             for (TimeSlot slot : slots) {
-                if (slot.getDate().equals(eventDate)) {
-                    // 슬롯과 이벤트가 겹치는지 확인 (완전히 겹치거나 부분적으로 겹치면 차단)
-                    // slot.startTime < eventEnd && slot.endTime > eventStart
-                    if (slot.getStartTime().isBefore(eventEnd) && slot.getEndTime().isAfter(eventStart)) {
-                        slot.setAvailable(false);
-                        log.debug("슬롯 차단: userId={}, date={}, slotIndex={}, event={}", 
-                            userId, eventDate, slot.getSlotIndex(), event.getTitle());
-                    }
+                // 날짜 비교 제거: 시간 구간 겹침만 확인
+                // 슬롯과 이벤트가 겹치는지 확인 (완전히 겹치거나 부분적으로 겹치면 차단)
+                // slot.startTime < eventEnd && slot.endTime > eventStart
+                if (slot.getStartTime().isBefore(eventEnd) && slot.getEndTime().isAfter(eventStart)) {
+                    slot.setAvailable(false);
+                    log.debug("슬롯 차단: userId={}, date={}, slotIndex={}, slotTime={}~{}, event={} ({})", 
+                        userId, slot.getDate(), slot.getSlotIndex(), 
+                        slot.getStartTime(), slot.getEndTime(),
+                        event.getTitle(), eventStart + "~" + eventEnd);
                 }
             }
         }
@@ -344,14 +395,15 @@ public class TimeSlotGenerator {
                 if (slots == null) continue;
                 
                 for (TimeSlot slot : slots) {
-                    if (slot.getDate().equals(occurrenceDate)) {
-                        // 슬롯과 이벤트가 겹치는지 확인
-                        if (slot.getStartTime().isBefore(occurrenceEnd) && 
-                            slot.getEndTime().isAfter(occurrenceStart)) {
-                            slot.setAvailable(false);
-                            log.debug("반복 이벤트 슬롯 차단: userId={}, date={}, slotIndex={}, event={}", 
-                                userId, occurrenceDate, slot.getSlotIndex(), event.getTitle());
-                        }
+                    // 날짜 비교 제거: 시간 구간 겹침만 확인하여 자정을 넘는 이벤트도 정확히 처리
+                    // 슬롯과 이벤트가 겹치는지 확인
+                    if (slot.getStartTime().isBefore(occurrenceEnd) && 
+                        slot.getEndTime().isAfter(occurrenceStart)) {
+                        slot.setAvailable(false);
+                        log.debug("반복 이벤트 슬롯 차단: userId={}, date={}, slotIndex={}, slotTime={}~{}, event={} ({})", 
+                            userId, slot.getDate(), slot.getSlotIndex(),
+                            slot.getStartTime(), slot.getEndTime(),
+                            event.getTitle(), occurrenceStart + "~" + occurrenceEnd);
                     }
                 }
             }
@@ -415,13 +467,6 @@ public class TimeSlotGenerator {
         }
         
         return dates;
-    }
-
-    /**
-     * LocalTime을 슬롯 인덱스로 변환
-     */
-    private int timeToSlotIndex(java.time.LocalTime time) {
-        return (time.getHour() * 2) + (time.getMinute() / 30);
     }
 
     /**

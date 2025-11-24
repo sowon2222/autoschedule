@@ -78,6 +78,7 @@ export default function CalendarEventModal({ isOpen, onClose, eventId, onUpdate 
     : null
   
   const [assignments, setAssignments] = useState<AssignmentResponse[]>([]) // 스케줄 작업의 Assignment 목록
+  const [assignmentData, setAssignmentData] = useState<AssignmentResponse | null>(null) // 개별 Assignment 데이터
 
   // Task form state
   const [taskData, setTaskData] = useState<TaskResponse | null>(null)
@@ -113,6 +114,7 @@ export default function CalendarEventModal({ isOpen, onClose, eventId, onUpdate 
     setLoading(true)
     setError('')
     setAssignments([])
+    setAssignmentData(null)
     
     const loadData = async () => {
       try {
@@ -142,10 +144,34 @@ export default function CalendarEventModal({ isOpen, onClose, eventId, onUpdate 
             assigneeId: taskData.assigneeId
           })
         } else if (isScheduleAssignment) {
-          // 개별 Assignment: Assignment ID로 Task 찾기 (taskId를 모르므로 모든 팀의 Assignment를 조회해야 함)
-          // 이 케이스는 현재 사용되지 않지만, 혹시 모를 경우를 대비해 유지
-          // 실제로는 schedule-task-${taskId} 형식만 사용됨
-          setError('개별 Assignment 조회는 현재 지원되지 않습니다.')
+          // 개별 Assignment: Assignment 정보와 관련 Task 정보 가져오기
+          const assignmentResponse = await api.get(`/api/assignments/${id}`)
+          const assignment = assignmentResponse.data as AssignmentResponse
+          setAssignmentData(assignment)
+          
+          // Assignment에 taskId가 있으면 Task 정보도 가져오기
+          if (assignment.taskId) {
+            try {
+              const taskResponse = await api.get(`/api/tasks/${assignment.taskId}`)
+              const taskData = taskResponse.data as TaskResponse
+              setTaskData(taskData)
+              setTaskForm({
+                title: taskData.title,
+                durationMin: taskData.durationMin,
+                dueAt: taskData.dueAt ? new Date(taskData.dueAt).toISOString().slice(0, 16) : '',
+                priority: taskData.priority,
+                splittable: taskData.splittable,
+                tags: taskData.tags || '',
+                assigneeId: taskData.assigneeId
+              })
+            } catch (taskErr: any) {
+              console.warn('Task 정보를 불러오는데 실패했습니다:', taskErr)
+              // Task 정보가 없어도 Assignment 정보는 표시 가능
+            }
+          }
+          
+          // 개별 Assignment를 배열로 설정 (표시를 위해)
+          setAssignments([assignment])
         } else if (isTask) {
           const response = await api.get(`/api/tasks/${id}`)
           const data = response.data as TaskResponse
@@ -265,7 +291,7 @@ export default function CalendarEventModal({ isOpen, onClose, eventId, onUpdate 
             <div className="bg-red-50 border border-red-200 rounded-md p-4 text-red-600">
               {error}
             </div>
-          ) : (isTask || isScheduleTask || isScheduleAssignment) && taskData ? (
+          ) : (isTask || isScheduleTask || (isScheduleAssignment && taskData)) && taskData ? (
             <div className="space-y-4">
               {isEditMode ? (
                 <>
@@ -357,10 +383,6 @@ export default function CalendarEventModal({ isOpen, onClose, eventId, onUpdate 
                       </p>
                     </div>
                     <div>
-                      <span className="text-sm font-medium text-gray-500">소요 시간</span>
-                      <p className="text-gray-900 mt-1">{taskData.durationMin}분</p>
-                    </div>
-                    <div>
                       <span className="text-sm font-medium text-gray-500">우선순위</span>
                       <p className="text-gray-900 mt-1">{taskData.priority}</p>
                     </div>
@@ -446,6 +468,40 @@ export default function CalendarEventModal({ isOpen, onClose, eventId, onUpdate 
                   )}
                 </>
               )}
+            </div>
+          ) : isScheduleAssignment && assignmentData && !taskData ? (
+            // Assignment만 있고 Task 정보가 없는 경우
+            <div className="space-y-4">
+              <div>
+                <span className="text-sm font-medium text-gray-500">제목</span>
+                <p className="text-lg font-semibold text-gray-900 mt-1">{assignmentData.title || assignmentData.taskTitle || 'Assignment'}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <span className="text-sm font-medium text-gray-500">시작 시간</span>
+                  <p className="text-gray-900 mt-1">
+                    {assignmentData.startsAt ? new Date(assignmentData.startsAt).toLocaleString('ko-KR') : '미설정'}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-sm font-medium text-gray-500">종료 시간</span>
+                  <p className="text-gray-900 mt-1">
+                    {assignmentData.endsAt ? new Date(assignmentData.endsAt).toLocaleString('ko-KR') : '미설정'}
+                  </p>
+                </div>
+                {assignmentData.taskId && (
+                  <div>
+                    <span className="text-sm font-medium text-gray-500">작업 ID</span>
+                    <p className="text-gray-900 mt-1">{assignmentData.taskId}</p>
+                  </div>
+                )}
+                {assignmentData.scheduleId && (
+                  <div>
+                    <span className="text-sm font-medium text-gray-500">스케줄 ID</span>
+                    <p className="text-gray-900 mt-1">{assignmentData.scheduleId}</p>
+                  </div>
+                )}
+              </div>
             </div>
           ) : isEvent && eventData ? (
             <div className="space-y-4">
