@@ -187,7 +187,7 @@ sbb/
 
 ## 참고 링크
 
-- [개발 블로그 - AutoSchedule 기록](https://sowon02.tistory.com/)
+- [개발 블로그 - AutoSchedule 기록](https://sowon02.tistory.com/category/Project/AutoSchedule)
 
 ---
 
