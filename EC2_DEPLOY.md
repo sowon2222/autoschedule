@@ -69,7 +69,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO autosched;
 \q
 ```
 
-**중요**: PostgreSQL 15 이상 버전에서는 `public` 스키마에 대한 권한을 명시적으로 부여해야 합니다.
+**중요**: PostgreSQL 15 이상 버전에서는 `public` 스키마에 대한 권한을 명시적으로 부여해야 함
 
 ### Nginx 설치 (선택사항 - 프론트엔드를 별도로 서빙하는 경우)
 
@@ -79,7 +79,7 @@ sudo systemctl start nginx
 sudo systemctl enable nginx
 ```
 
-**참고**: 현재는 프론트엔드가 JAR 파일 안에 포함되어 있어 Nginx 없이도 동작. Nginx는 리버스 프록시나 SSL 설정이 필요한 경우에만 사용.
+**참고**: 현재는 프론트엔드가 JAR 파일 안에 포함되어 있어 Nginx 없이도 동작함. Nginx는 리버스 프록시나 SSL 설정이 필요한 경우에만 사용하면 된다.
 
 ---
 
@@ -91,7 +91,7 @@ sudo systemctl enable nginx
 sudo nano /etc/systemd/system/autoschedule.service
 ```
 
-다음 내용 입력 (실제 값으로 변경): EC2_IP
+다음 내용 입력 (실제 값으로 변경): $EC2_IP
 
 ```ini
 [Unit]
