@@ -7,11 +7,11 @@ EC2 인스턴스에 AutoSchedule을 배포하는 단계별 가이드입니다.
 - [x] AWS EC2 인스턴스 생성 완료
 - [x] EC2 인스턴스에 SSH 접속 가능
 - [x] EC2 보안 그룹 설정 (포트 22, 80, 443, 8080 열기)
-- [ ] 도메인 (선택사항, IP로도 접속 가능)
+- [ ] 도메인 (선택사항, IP로도 접속 가능) 
 
 **변수 설정 (이 문서에서 사용할 값):**
 - `EC2_IP`: EC2 퍼블릭 IP 주소 (예: `http://54.206.65.33/`)
-- `KEY_PATH`: SSH 키 파일 경로 (예: `C:\Users\sowon\Downloads\autoschedule-keypair.pem`)
+- `KEY_PATH`: SSH 키 파일 경로 (예: `C:\Users\sowon\aws\keypiar\keypair.pem`)
 - `DB_PASSWORD`: PostgreSQL 데이터베이스 비밀번호
 
 ---
@@ -22,7 +22,7 @@ EC2 인스턴스에 AutoSchedule을 배포하는 단계별 가이드입니다.
 
 ```powershell
 # Windows (PowerShell)
-ssh -i "C:\Users\sowon\Downloads\autoschedule-keypair.pem" ubuntu@3.106.203.246
+ssh -i $KEY_PATH ubuntu@$EC2_IP
 ```
 
 ### 시스템 업데이트
@@ -79,7 +79,7 @@ sudo systemctl start nginx
 sudo systemctl enable nginx
 ```
 
-**참고**: 현재는 프론트엔드가 JAR 파일 안에 포함되어 있어 Nginx 없이도 동작합니다. Nginx는 리버스 프록시나 SSL 설정이 필요한 경우에만 사용하세요.
+**참고**: 현재는 프론트엔드가 JAR 파일 안에 포함되어 있어 Nginx 없이도 동작. Nginx는 리버스 프록시나 SSL 설정이 필요한 경우에만 사용.
 
 ---
 
@@ -91,7 +91,7 @@ sudo systemctl enable nginx
 sudo nano /etc/systemd/system/autoschedule.service
 ```
 
-다음 내용 입력 (실제 값으로 변경): 54.206.65.33
+다음 내용 입력 (실제 값으로 변경): EC2_IP
 
 ```ini
 [Unit]
@@ -117,16 +117,6 @@ RestartSec=10
 WantedBy=multi-user.target
 ```
 
-IP 주소가 바뀌었을 때는 $EC2_IP 부분을 새로운 IP 주소로 바꿔주어야 합니다. 
-그 다음 :
-```
-- 서비스 리로드
-sudo systemctl daemon-reload
-
-- 서비스 재시작
-sudo systemctl restart autoschedule
-```
-
 **JVM 옵션 설명**:
 - `-Xms512m`: 초기 힙 메모리 512MB
 - `-Xmx1024m`: 최대 힙 메모리 1GB (EC2 인스턴스 메모리에 맞게 조정)
@@ -134,7 +124,7 @@ sudo systemctl restart autoschedule
 - `-XX:MaxGCPauseMillis=200`: GC 일시정지 시간 최대 200ms
 
 **중요**: 
-- `$EC2_IP`를 실제 EC2 퍼블릭 IP로 변경
+- `$EC2_IP`를 실제 EC2 퍼블릭 IP로 변경 (IP가 바뀌면 이 파일도 수정해야 함)
 - `$DB_PASSWORD`를 실제 데이터베이스 비밀번호로 변경
 
 ### 서비스 활성화
@@ -200,7 +190,8 @@ sudo journalctl -u autoschedule -f
 
 ## 4단계: Nginx 설정 (선택사항)
 
-프론트엔드가 JAR에 포함되어 있어 기본적으로는 Nginx가 필요 없습니다. 하지만 리버스 프록시나 SSL 설정이 필요한 경우:
+프론트엔드가 JAR에 포함되어 있어 기본적으로는 Nginx가 필요 없음. 
+하지만 리버스 프록시나 SSL 설정이 필요한 경우:
 
 ### Nginx 설정 파일 생성
 
